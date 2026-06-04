@@ -1,18 +1,19 @@
 {
+  // Root tsconfig file using project references
+  // This approach provides better performance and organization
+  "files": [],
+  "references": [
+    // Configuration for application source code (src/)
+    { "path": "./tsconfig.app.json" },
+    // Configuration for Node.js files (vite.config.ts, etc.)
+    { "path": "./tsconfig.node.json" },
+  ],
+
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "lib": ["ESNext", "DOM"],
-    "moduleResolution": "Node",
-    "strict": true,
-    "sourceMap": true,
-    "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "types": ["vite/client"],
-    "noEmit": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitReturns": true
+    "baseUrl": "./",
+
+    "paths": {
+      "@/*": ["./src/*"],
+    },
   },
-  "include": ["./src"]
 }

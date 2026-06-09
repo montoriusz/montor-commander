@@ -6,7 +6,11 @@ A Tauri 2 desktop terminal app. The frontend is TypeScript + Vite using xterm.js
 
 ## Layout
 
-- `src/` — frontend TypeScript (`main.ts`, `styles.css`), with generated Tauri bindings in `src/generated/`.
+- `src/` — frontend TypeScript + React, with generated Tauri bindings in `src/generated/`.
+  - `src/app/` — app components (`app.tsx`) and hooks (`use-terminal.ts`, `terminal-sections.ts`).
+  - `src/ui/primitives/` — Panda CSS / Ark UI primitive components.
+  - `src/theme/` — Panda CSS theme configuration.
+  - `src/main.tsx` — React entry point.
 - `src-tauri/` — Rust backend (`src/`, `Cargo.toml`, `tauri.conf.json`).
 - `index.html` — Vite entry point.
 
@@ -22,6 +26,15 @@ Uses pnpm.
 
 ## Conventions
 
-- Frontend is TypeScript; keep `tsc` passing.
+- Frontend is TypeScript + React; keep `tsc` passing.
+- xterm.js terminal lifecycle is managed by the `useTerminal` hook in `src/app/use-terminal.ts`.
+- Shell integration (OSC 133) section logic is in `src/app/terminal-sections.ts`.
+- Styling uses Panda CSS (`styled-system/`) and Ark UI primitives — avoid raw CSS unless necessary.
 - Backend is Rust; run `cargo check` in `src-tauri/`.
 - Do not edit generated files in `src/generated/`; regenerate them instead.
+
+### File Naming
+
+**Kebab Case** must be used for all file and directory names. E.g. `my-function.ts`, `my-component/helpers.ts`) for everything that is not a React component name.
+If a component needs to group more sub-components, private hooks, or other helpers, they should be placed in a folder. The folder should contain an index file re-exporting public symbols.
+If more further grouping is needed, files that group multiple declarations of the same type/purpose can include type suffixes such as `constants`, `helpers`, or `types` in their names; e.g., `oidc.constants.ts`, `sub-component.helpers.ts`.

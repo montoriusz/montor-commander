@@ -1,0 +1,47 @@
+// Folder-specific settings
+//
+// For a full list of overridable settings, and general information on folder-specific settings,
+// see the documentation: https://zed.dev/docs/configuring-zed#settings-files
+{
+  "format_on_save": "on",
+  "language_servers": ["!eslint", "prettier", "biome", "!tailwindcss", "..."],
+  "languages": {
+    "JavaScript": {
+      "formatter": "prettier",
+      "code_actions_on_format": {
+        "source.fixAll.biome": true,
+        "source.organizeImports.biome": true,
+      },
+    },
+    "TypeScript": {
+      "formatter": "prettier",
+      "code_actions_on_format": {
+        "source.fixAll.biome": true,
+        "source.organizeImports.biome": true,
+      },
+    },
+    "TSX": {
+      "formatter": "prettier",
+      "code_actions_on_format": {
+        "source.fixAll.biome": true,
+        "source.organizeImports.biome": true,
+      },
+    },
+    "CSS": { "formatter": "prettier" },
+    "HTML": { "formatter": "prettier" },
+    "JSON": { "formatter": "prettier" },
+    "JSONC": { "formatter": "prettier" },
+  },
+  "context_servers": {
+    "ark-ui-mcp": {
+      "enabled": true,
+      "command": "pnpx",
+      "args": ["@ark-ui/mcp"],
+    },
+    "panda-mcp": {
+      "enabled": true,
+      "command": "pnpm",
+      "args": ["panda", "mcp"],
+    },
+  },
+}

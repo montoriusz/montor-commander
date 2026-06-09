@@ -1,16 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/config.schema.json",
-  "productName": "tauri-terminal",
-  "version": "0.0.0",
-  "identifier": "com.tauri-terminal.dev",
-  "build": {
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build",
-    "devUrl": "http://localhost:1420",
-    "frontendDist": "../dist"
-  },
   "app": {
-    "withGlobalTauri": true,
     "security": {
       "csp": "default-src 'self'"
     },
@@ -18,12 +8,19 @@
       {
         "decorations": true,
         "fullscreen": false,
+        "height": 600,
         "resizable": true,
         "title": "tauri-terminal",
-        "width": 800,
-        "height": 600
+        "width": 800
       }
-    ]
+    ],
+    "withGlobalTauri": true
+  },
+  "build": {
+    "beforeBuildCommand": "pnpm build",
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
   },
   "bundle": {
     "active": true,
@@ -35,5 +32,22 @@
       "icons/icon.ico"
     ],
     "targets": "all"
-  }
+  },
+  "identifier": "com.tauri-terminal.dev",
+  "plugins": {
+    "typegen": {
+      "excludePatterns": null,
+      "force": true,
+      "includePatterns": null,
+      "includePrivate": true,
+      "outputPath": "./src/generated",
+      "projectPath": "./src-tauri",
+      "typeMappings": null,
+      "validationLibrary": "none",
+      "verbose": true,
+      "visualizeDeps": false
+    }
+  },
+  "productName": "tauri-terminal",
+  "version": "0.0.0"
 }

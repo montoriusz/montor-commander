@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "typecheck": "tsc --noEmit --project tsconfig.app.json",
+    "tauri": "tauri",
+    "tauri-typegen": "cargo tauri-typegen generate"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

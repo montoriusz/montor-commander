@@ -1,18 +1,17 @@
 # Source the user's normal interactive config first
 if [ -f ~/.bashrc ]; then . ~/.bashrc; fi
 
-__osc133_id=0
-__osc133_prompt_start() { printf '\033]133;A;aid=%s\007' "$__osc133_id"; }
-__osc133_prompt_end()   { printf '\033]133;B\007' "$__osc133_id"; }
-__osc133_cmd_start()    { printf '\033]133;C\007' "$__osc133_id"; }
+__osc133_aid_counter=0
+__osc133_prompt_start() { printf '\033]133;A;aid=%s-%s\007' "$$" "$__osc133_aid_counter"; }
+__osc133_prompt_end()   { printf '\033]133;B;aid=%s-%s\007' "$$" "$__osc133_aid_counter"; }
+__osc133_cmd_start()    { printf '\033]133;C;aid=%s-%s\007' "$$" "$__osc133_aid_counter"; }
 __osc133_cmd_done() {
     local ec=$?
-    if [[ $__osc133_id != 0 ]]; then
-        printf '\033]133;D;%s;aid=%s\007' "$ec" "$__osc133_id"
+    if [[ $__osc133_aid_counter != 0 ]]; then
+        printf '\033]133;D;%s;aid=%s-%s\007' "$ec" "$$" "$__osc133_aid_counter"
     fi
-    __osc133_id=$((__osc133_id + 1))
+    __osc133_aid_counter=$((__osc133_aid_counter + 1))
 }
-
 
 # PROMPT_COMMAND runs before PS1 is shown; capture $? first so other entries
 # don't clobber it, then emit D (finished) and A (prompt start).

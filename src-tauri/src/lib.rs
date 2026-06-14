@@ -26,13 +26,13 @@ struct PtyOutputPayload {
 #[serde(rename_all = "camelCase")]
 struct CommandFinishedPayload {
     exit_code: Option<i32>,
-    aid: Option<u64>,
+    aid: Option<String>,
 }
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ShellEventPayload {
-    aid: Option<u64>,
+    aid: Option<String>,
 }
 
 #[tauri::command]

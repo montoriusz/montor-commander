@@ -34,17 +34,17 @@ const MARKER_FINISHED: &[u8] = b"D";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShellEvent {
     PromptStarted {
-        aid: Option<u64>,
+        aid: Option<String>,
     },
     PromptEnded {
-        aid: Option<u64>,
+        aid: Option<String>,
     },
     CommandStarted {
-        aid: Option<u64>,
+        aid: Option<String>,
     },
     CommandFinished {
         exit_code: Option<i32>,
-        aid: Option<u64>,
+        aid: Option<String>,
     },
 }
 
@@ -129,14 +129,11 @@ pub fn scan(carry: &mut Vec<u8>, chunk: &[u8], mut callback: impl FnMut(ShellEve
 }
 
 /// Try to extract an `aid=<value>` parameter from a slice of semicolon-separated
-/// parameter segments. Returns the parsed `u64` if found.
-/// TODO: switch to string aid
-fn parse_aid(params: &[&[u8]]) -> Option<u64> {
+/// parameter segments. Returns the aid string if found.
+fn parse_aid(params: &[&[u8]]) -> Option<String> {
     for param in params {
         if let Some(aid_val) = param.strip_prefix(b"aid=") {
-            return std::str::from_utf8(aid_val)
-                .ok()
-                .and_then(|s| s.parse().ok());
+            return std::str::from_utf8(aid_val).ok().map(|s| s.to_string());
         }
     }
     None
@@ -298,7 +295,25 @@ mod tests {
         let mut carry = Vec::new();
         let seq = b"\x1b]133;A;aid=42\x07";
         let events = scan_collect(&mut carry, seq);
-        assert_eq!(events, vec![ShellEvent::PromptStarted { aid: Some(42) }]);
+        assert_eq!(
+            events,
+            vec![ShellEvent::PromptStarted {
+                aid: Some("42".to_string())
+            }]
+        );
+    }
+
+    #[test]
+    fn prompt_with_pid_counter_aid() {
+        let mut carry = Vec::new();
+        let seq = b"\x1b]133;A;aid=12345-0\x07";
+        let events = scan_collect(&mut carry, seq);
+        assert_eq!(
+            events,
+            vec![ShellEvent::PromptStarted {
+                aid: Some("12345-0".to_string())
+            }]
+        );
     }
 
     #[test]
@@ -306,7 +321,12 @@ mod tests {
         let mut carry = Vec::new();
         let seq = b"\x1b]133;C;aid=7\x07";
         let events = scan_collect(&mut carry, seq);
-        assert_eq!(events, vec![ShellEvent::CommandStarted { aid: Some(7) }]);
+        assert_eq!(
+            events,
+            vec![ShellEvent::CommandStarted {
+                aid: Some("7".to_string())
+            }]
+        );
     }
 
     #[test]
@@ -318,7 +338,7 @@ mod tests {
             events,
             vec![ShellEvent::CommandFinished {
                 exit_code: Some(0),
-                aid: Some(3)
+                aid: Some("3".to_string())
             }]
         );
     }
@@ -332,7 +352,7 @@ mod tests {
             events,
             vec![ShellEvent::CommandFinished {
                 exit_code: None,
-                aid: Some(5)
+                aid: Some("5".to_string())
             }]
         );
     }
@@ -342,24 +362,35 @@ mod tests {
         let mut carry = Vec::new();
         let seq = b"\x1b]133;B;aid=1\x07";
         let events = scan_collect(&mut carry, seq);
-        assert_eq!(events, vec![ShellEvent::PromptEnded { aid: Some(1) }]);
+        assert_eq!(
+            events,
+            vec![ShellEvent::PromptEnded {
+                aid: Some("1".to_string())
+            }]
+        );
     }
 
     #[test]
     fn full_command_cycle_with_aid() {
         let mut carry = Vec::new();
         let seq =
-            b"\x1b]133;A;aid=1\x07\x1b]133;B;aid=1\x07\x1b]133;C;aid=1\x07\x1b]133;D;0;aid=1\x07";
+            b"\x1b]133;A;aid=12345-1\x07\x1b]133;B;aid=12345-1\x07\x1b]133;C;aid=12345-1\x07\x1b]133;D;0;aid=12345-1\x07";
         let events = scan_collect(&mut carry, seq);
         assert_eq!(
             events,
             vec![
-                ShellEvent::PromptStarted { aid: Some(1) },
-                ShellEvent::PromptEnded { aid: Some(1) },
-                ShellEvent::CommandStarted { aid: Some(1) },
+                ShellEvent::PromptStarted {
+                    aid: Some("12345-1".to_string())
+                },
+                ShellEvent::PromptEnded {
+                    aid: Some("12345-1".to_string())
+                },
+                ShellEvent::CommandStarted {
+                    aid: Some("12345-1".to_string())
+                },
                 ShellEvent::CommandFinished {
                     exit_code: Some(0),
-                    aid: Some(1)
+                    aid: Some("12345-1".to_string())
                 },
             ]
         );

@@ -1,3 +1,5 @@
+#[path = "jsonl-store.rs"]
+mod jsonl_store;
 mod osc133;
 
 use osc133::ShellEvent;

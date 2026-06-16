@@ -6,7 +6,7 @@ import {
   Root as SplitterRoot,
 } from '@/ui/primitives/splitter';
 import { ChatPane } from './chat';
-import { TerminalPane, type TerminalHandle } from './terminal-pane';
+import { type TerminalHandle, TerminalPane } from './terminal-pane';
 
 export function App() {
   const terminalRef = useRef<TerminalHandle>(null);

@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noArrayIndexKey: safe */
 'use client';
 import { Carousel, useCarouselContext } from '@ark-ui/react/carousel';
 import { type ComponentProps, forwardRef } from 'react';

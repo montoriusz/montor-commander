@@ -124,7 +124,7 @@ export const TerminalPane = forwardRef<TerminalHandle>(function TerminalPane(_, 
       fitAddonRef.current = null;
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, []);
+  }, [fit]);
 
   return (
     <Box

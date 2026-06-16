@@ -1,11 +1,11 @@
-import { useState } from 'react';
 import { ArrowUp } from 'lucide-react';
+import { useState } from 'react';
 import { Box, Flex } from 'styled-system/jsx';
+import type { ChatMessage } from '@/generated';
 import { IconButton, Textarea } from '@/ui/primitives';
 import * as ScrollArea from '@/ui/primitives/scroll-area';
-import { useChat } from './use-chat';
-import type { ChatMessage } from '@/generated';
 import { Markdown } from '../shared/markdown';
+import { useChat } from './use-chat';
 
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.type === 'User';

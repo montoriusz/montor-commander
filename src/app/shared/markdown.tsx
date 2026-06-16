@@ -1,11 +1,10 @@
 import ReactMarkdown, { type Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Code } from '@/ui/primitives';
-import { css } from 'styled-system/css';
-import { prose } from 'styled-system/recipes';
+import remarkGfm from 'remark-gfm';
 import { Box } from 'styled-system/jsx';
+import { prose } from 'styled-system/recipes';
+import { Code } from '@/ui/primitives';
 
 const components: Components = {
   code({

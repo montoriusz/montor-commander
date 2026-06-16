@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noArrayIndexKey: safe */
 'use client';
 import { Pagination, usePaginationContext } from '@ark-ui/react/pagination';
 import { EllipsisIcon } from 'lucide-react';

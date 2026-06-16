@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noArrayIndexKey: safe */
 'use client';
 import { ark } from '@ark-ui/react/factory';
 import { Slider, useSliderContext } from '@ark-ui/react/slider';

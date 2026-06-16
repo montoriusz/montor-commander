@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { chatStore } from './chat-store';
 import type { ChatMessage } from '@/generated';
+import { chatStore } from './chat-store';
 
 export function useChat() {
   const state = useSyncExternalStore(chatStore.subscribe, chatStore.getSnapshot);

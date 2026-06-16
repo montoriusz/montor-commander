@@ -27,14 +27,19 @@ Uses pnpm.
 ## Conventions
 
 - Frontend is TypeScript + React; keep `tsc` passing.
-- xterm.js terminal lifecycle is managed by the `useTerminal` hook in `src/app/use-terminal.ts`.
-- Shell integration (OSC 133) section logic is in `src/app/terminal-sections.ts`.
+- xterm.js for used as a terminal emulator.
+- There is an assistant chat next to the terminal.
 - Styling uses Panda CSS (`styled-system/`) and Ark UI primitives — avoid raw CSS unless necessary.
 - Backend is Rust; run `cargo check` in `src-tauri/`.
 - Do not edit generated files in `src/generated/`; regenerate them instead.
+- Save Implementation plans in `src/implementation-plans`.
 
-### File Naming
+### File Naming (`src/`)
 
-**Kebab Case** must be used for all file and directory names. E.g. `my-function.ts`, `my-component/helpers.ts`) for everything that is not a React component name.
+**Kebab Case** must be used for all file and directory names in `src/`. E.g. `my-function.ts`, `my-component/helpers.ts`) for everything that is not a React component name.
 If a component needs to group more sub-components, private hooks, or other helpers, they should be placed in a folder. The folder should contain an index file re-exporting public symbols.
 If more further grouping is needed, files that group multiple declarations of the same type/purpose can include type suffixes such as `constants`, `helpers`, or `types` in their names; e.g., `oidc.constants.ts`, `sub-component.helpers.ts`.
+
+### File Naming (`src-tauri/`)
+
+Prefer **Snake Case** for all file and directory names in `src-tauri/`. Adhere to Rust conventions.

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, Read as _, Seek, SeekFrom, Write};
 use std::marker::PhantomData;
@@ -84,11 +86,14 @@ impl From<std::io::Error> for JsonlStoreError {
     }
 }
 
-/// A message envelope carrying its byte-offset ID and the deserialized payload.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct MessageEnvelope<T> {
-    pub id: u32,
-    pub payload: T,
+/// Result of a [`JsonlStore::read`] call, carrying the items and a cursor
+/// for the next read.
+#[derive(Debug)]
+pub struct ReadPage<T> {
+    pub items: Vec<T>,
+    /// Byte offset to pass as `start_id` on the next read.
+    /// When no messages are read, this equals the `start_id` that was passed in.
+    pub next_id: u32,
 }
 
 /// Append-only JSONL/NDJSON store.
@@ -109,6 +114,9 @@ pub struct JsonlStore<T> {
     idle_timeout: Duration,
     /// Maximum permitted file size in bytes. Defaults to [`MAX_FILE_SIZE`].
     max_file_size: u64,
+    /// Callback for writing the byte-offset ID to the message `&mut T` after
+    /// deserialising each in [`JsonlStore::read`].
+    on_read: Option<Box<dyn Fn(&mut T, u32) + Send + Sync>>,
     _marker: PhantomData<T>,
 }
 
@@ -126,6 +134,7 @@ impl<T> JsonlStore<T> {
             handle: Mutex::new(None),
             idle_timeout: DEFAULT_IDLE_TIMEOUT,
             max_file_size: MAX_FILE_SIZE,
+            on_read: None,
             _marker: PhantomData,
         })
     }
@@ -148,6 +157,15 @@ impl<T> JsonlStore<T> {
         self
     }
 
+    /// Set a callback that is invoked with `&mut T` and its byte-offset ID
+    /// after deserialising each message in [`JsonlStore::read`].
+    ///
+    /// This is typically used to write the ID into the message itself.
+    pub fn with_on_read(mut self, f: impl Fn(&mut T, u32) + Send + Sync + 'static) -> Self {
+        self.on_read = Some(Box::new(f));
+        self
+    }
+
     /// Close the cached file handle if it has been idle longer than the
     /// configured timeout.
     ///
@@ -165,7 +183,7 @@ impl<T> JsonlStore<T> {
     /// `ensure_handle` and the actual use of the handle.
     fn acquire_handle(&self) -> std::io::Result<std::sync::MutexGuard<'_, Option<CachedHandle>>> {
         let mut guard = self.handle.lock().unwrap();
-        evict_if_expired(&mut guard, self.idle_timeout);
+        // evict_if_expired(&mut guard, self.idle_timeout);
         if guard.is_none() {
             let file = OpenOptions::new()
                 .read(true)
@@ -226,16 +244,15 @@ impl<T: serde::Serialize + serde::de::DeserializeOwned> JsonlStore<T> {
     /// Returns [`JsonlStoreError::InvalidId`] if `start_id` is non-zero and
     /// the byte immediately before that offset is not `\n` (i.e. the ID does
     /// not fall on a line boundary).
-    pub fn read(
-        &self,
-        start_id: u32,
-        count: Option<u32>,
-    ) -> Result<Vec<MessageEnvelope<T>>, JsonlStoreError> {
+    pub fn read(&self, start_id: u32, count: Option<u32>) -> Result<ReadPage<T>, JsonlStoreError> {
         let limit = count.unwrap_or(u32::MAX);
 
         // No file yet and no cached handle → empty store.
         if !self.path.exists() && self.handle.lock().unwrap().is_none() {
-            return Ok(Vec::new());
+            return Ok(ReadPage {
+                items: Vec::new(),
+                next_id: start_id,
+            });
         }
 
         // Hold the handle guard for the entire read so no other thread can
@@ -267,7 +284,7 @@ impl<T: serde::Serialize + serde::de::DeserializeOwned> JsonlStore<T> {
 
         reader.seek(SeekFrom::Start(start_id as u64))?;
 
-        let mut results = Vec::new();
+        let mut items = Vec::new();
         let mut offset = start_id;
         let mut line_buf = Vec::new();
         let mut remaining = limit;
@@ -292,20 +309,24 @@ impl<T: serde::Serialize + serde::de::DeserializeOwned> JsonlStore<T> {
                 continue;
             }
 
-            let payload: T = serde_json::from_slice(line)
+            let mut payload: T = serde_json::from_slice(line)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
-            results.push(MessageEnvelope {
-                id: offset as u32,
-                payload,
-            });
+            if let Some(ref f) = self.on_read {
+                f(&mut payload, offset as u32);
+            }
+
+            items.push(payload);
             offset += bytes_read as u32;
             remaining -= 1;
         }
 
         cached.last_used = Instant::now();
 
-        Ok(results)
+        Ok(ReadPage {
+            items,
+            next_id: offset,
+        })
     }
 }
 
@@ -332,19 +353,25 @@ mod tests {
     }
 
     #[test]
-    fn read_returns_envelopes_with_ids() {
+    fn read_returns_messages_with_ids_via_callback() {
         let dir = TempDir::new().unwrap();
-        let store = make_store(dir.path(), "test.jsonl");
+        let store = JsonlStore::new(dir.path(), "test.jsonl")
+            .unwrap()
+            .with_on_read(|msg: &mut serde_json::Value, id: u32| {
+                msg["id"] = serde_json::json!(id);
+            });
 
         let id0 = store.write(serde_json::json!({ "a": 1 })).unwrap();
         let id1 = store.write(serde_json::json!({ "b": 2 })).unwrap();
 
-        let msgs = store.read(0, None).unwrap();
-        assert_eq!(msgs.len(), 2);
-        assert_eq!(msgs[0].id, id0);
-        assert_eq!(msgs[0].payload, serde_json::json!({ "a": 1 }));
-        assert_eq!(msgs[1].id, id1);
-        assert_eq!(msgs[1].payload, serde_json::json!({ "b": 2 }));
+        let page = store.read(0, None).unwrap();
+        assert_eq!(page.items.len(), 2);
+        assert_eq!(page.items[0]["id"], id0);
+        assert_eq!(page.items[0]["a"], 1);
+        assert_eq!(page.items[1]["id"], id1);
+        assert_eq!(page.items[1]["b"], 2);
+        // next_id should be past the last byte read
+        assert!(page.next_id > id1);
     }
 
     #[test]
@@ -355,9 +382,10 @@ mod tests {
         store.write(serde_json::json!({ "a": 1 })).unwrap();
         let id1 = store.write(serde_json::json!({ "b": 2 })).unwrap();
 
-        let msgs = store.read(id1, None).unwrap();
-        assert_eq!(msgs.len(), 1);
-        assert_eq!(msgs[0].payload, serde_json::json!({ "b": 2 }));
+        let page = store.read(id1, None).unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.items[0], serde_json::json!({ "b": 2 }));
+        assert!(page.next_id > id1);
     }
 
     #[test]
@@ -366,11 +394,11 @@ mod tests {
         let store = make_store(dir.path(), "test.jsonl");
 
         store.write(serde_json::json!({ "a": 1 })).unwrap();
-        store.write(serde_json::json!({ "b": 2 })).unwrap();
-        store.write(serde_json::json!({ "c": 3 })).unwrap();
+        let id1 = store.write(serde_json::json!({ "b": 2 })).unwrap();
 
-        let msgs = store.read(0, Some(2)).unwrap();
-        assert_eq!(msgs.len(), 2);
+        let page = store.read(0, Some(1)).unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.next_id, id1);
     }
 
     #[test]
@@ -378,8 +406,9 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let store = make_store(dir.path(), "absent.jsonl");
 
-        let msgs = store.read(0, None).unwrap();
-        assert!(msgs.is_empty());
+        let page = store.read(0, None).unwrap();
+        assert!(page.items.is_empty());
+        assert_eq!(page.next_id, 0);
     }
 
     #[test]
@@ -444,11 +473,10 @@ mod tests {
         }
 
         // Rapid reads – should reuse the same cached handle.
-        let msgs = store.read(0, None).unwrap();
-        assert_eq!(msgs.len(), 10);
-        for (i, msg) in msgs.iter().enumerate() {
-            assert_eq!(msg.id, ids[i]);
-            assert_eq!(msg.payload, serde_json::json!({ "i": i as i64 }));
+        let page = store.read(0, None).unwrap();
+        assert_eq!(page.items.len(), 10);
+        for (i, msg) in page.items.iter().enumerate() {
+            assert_eq!(*msg, serde_json::json!({ "i": i as i64 }));
         }
     }
 
@@ -470,9 +498,9 @@ mod tests {
         assert!(id1 > id0);
 
         // New read should reopen the handle.
-        let msgs = store.read(id1, None).unwrap();
-        assert_eq!(msgs.len(), 1);
-        assert_eq!(msgs[0].payload, serde_json::json!({ "b": 2 }));
+        let page = store.read(id1, None).unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.items[0], serde_json::json!({ "b": 2 }));
     }
 
     #[test]
@@ -490,8 +518,8 @@ mod tests {
         store.evict_expired_handles();
 
         // A quick second operation should reuse the cached handle.
-        let msgs = store.read(0, None).unwrap();
-        assert_eq!(msgs.len(), 1);
+        let page = store.read(0, None).unwrap();
+        assert_eq!(page.items.len(), 1);
 
         // Now wait past the timeout.
         std::thread::sleep(Duration::from_millis(100));
@@ -502,7 +530,7 @@ mod tests {
         // Next operations reopen the handle and still work.
         let id = store.write(serde_json::json!({ "b": 2 })).unwrap();
         assert!(id > 0);
-        let msgs = store.read(0, None).unwrap();
-        assert_eq!(msgs.len(), 2);
+        let page2 = store.read(0, None).unwrap();
+        assert_eq!(page2.items.len(), 2);
     }
 }

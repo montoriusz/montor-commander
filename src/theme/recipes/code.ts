@@ -1,4 +1,4 @@
-import { defineRecipe } from '@pandacss/dev'
+import { defineRecipe } from '@pandacss/dev';
 
 export const code = defineRecipe({
   className: 'code',
@@ -47,5 +47,12 @@ export const code = defineRecipe({
       lg: { textStyle: 'sm', height: '5.5', minWidth: '5.5', px: '1' },
       xl: { textStyle: 'md', height: '6', minWidth: '6', px: '1' },
     },
+    block: {
+      true: {
+        overflow: 'auto',
+        whiteSpace: 'pre-wrap',
+        height: 'auto',
+      },
+    },
   },
-})
+});

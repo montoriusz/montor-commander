@@ -6,6 +6,7 @@ import { semanticTokens } from './semantic-tokens';
 import { textStyles } from './text-styles';
 import { colors } from './tokens/colors';
 import { durations } from './tokens/durations';
+import { fonts } from './tokens/fonts';
 import { sizes } from './tokens/sizes';
 import { zIndex } from './tokens/z-index';
 
@@ -22,6 +23,7 @@ export const themeExtend = {
     colors,
     durations,
     zIndex,
+    fonts,
   },
 
   semanticTokens,

@@ -5,7 +5,7 @@ import {
   ResizeTrigger as SplitterResizeTrigger,
   Root as SplitterRoot,
 } from '@/ui/primitives/splitter';
-import { ChatPane } from './chat-pane';
+import { ChatPane } from './chat';
 import { TerminalPane, type TerminalHandle } from './terminal-pane';
 
 export function App() {
@@ -15,7 +15,7 @@ export function App() {
     <SplitterRoot
       panels={[{ id: 'terminal' }, { id: 'chat' }]}
       variant="full"
-      defaultSize={[70, 30]}
+      defaultSize={[5, 4]}
       orientation="horizontal"
       h="screen"
       w="screen"

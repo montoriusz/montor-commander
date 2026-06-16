@@ -1,7 +1,8 @@
-#[path = "jsonl-store.rs"]
+pub mod chat;
 mod jsonl_store;
 mod osc133;
 
+use chat::ChatSession;
 use osc133::ShellEvent;
 use portable_pty::{native_pty_system, CommandBuilder, PtyPair, PtySize};
 use std::{
@@ -9,7 +10,7 @@ use std::{
     sync::Arc,
     thread,
 };
-use tauri::{async_runtime::Mutex as AsyncMutex, AppHandle, Emitter, State};
+use tauri::{async_runtime::Mutex as AsyncMutex, AppHandle, Emitter, Manager, State};
 
 /// Bash integration script embedded at compile time.
 static BASH_INTEGRATION: &str = include_str!("../assets/bash-integration.sh");
@@ -117,6 +118,8 @@ fn emit_shell_event(app: &AppHandle, event: ShellEvent) {
 }
 
 fn spawn_reader_thread(app: AppHandle, reader: Box<dyn Read + Send>) {
+    // TODO: convert to tokio async
+
     thread::spawn(move || {
         let mut reader = reader;
         let mut buf = [0u8; 4096];
@@ -157,6 +160,15 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             spawn_reader_thread(app.handle().clone(), reader);
+
+            // Create chat session.
+            let data_dir = app
+                .path()
+                .app_data_dir()
+                .expect("failed to resolve app data dir");
+            let chat_session = ChatSession::new(&data_dir).expect("failed to create chat session");
+            app.manage(chat_session);
+
             Ok(())
         })
         .manage(AppState {
@@ -167,6 +179,9 @@ pub fn run() {
             write_to_pty,
             resize_pty,
             create_shell,
+            chat::get_chat_session,
+            chat::read_chat_messages,
+            chat::send_chat_message,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -4,10 +4,10 @@ export const prose = defineRecipe({
   className: 'prose',
   base: {
     lineHeight: '1.45',
-    color: '{colors.text.secondary}',
+    color: '{colors.fg.muted}',
 
     '& h1, & h2, & h3, & h4, & h5, & h6': {
-      color: '{colors.text.primary}',
+      color: '{colors.fg.default}',
       fontWeight: '600',
       lineHeight: '1.3',
       marginTop: '1.5em',
@@ -18,16 +18,16 @@ export const prose = defineRecipe({
     '& h3': { fontSize: '1.25em' },
     '& h4, & h5, & h6': { fontSize: '1em' },
 
-    '& p': { marginBottom: '0.75em' },
+    '& p': { marginY: '0.5em' },
 
     '& a': {
-      color: '{colors.accent.primary}',
+      color: '{colors.blue.plain.fg}',
       textDecoration: 'none',
       _hover: { textDecoration: 'underline' },
     },
 
     '& strong': {
-      color: '{colors.text.primary}',
+      color: '{colors.fg.default}',
       fontWeight: '600',
     },
 
@@ -43,10 +43,10 @@ export const prose = defineRecipe({
     '& ol': { listStyleType: 'decimal' },
 
     '& blockquote': {
-      borderLeft: '3px solid {colors.accent.primary}',
+      borderLeft: '3px solid {colors.blue.plain.fg}',
       paddingLeft: '1em',
       margin: '1em 0',
-      color: '{colors.text.muted}',
+      color: '{colors.fg.subtle}',
       fontStyle: 'italic',
     },
 
@@ -56,7 +56,7 @@ export const prose = defineRecipe({
 
     '& hr': {
       border: 'none',
-      borderTop: '1px solid {colors.border.glass}',
+      borderTop: '1px solid {colors.border}',
       margin: '1.5em 0',
     },
 
@@ -67,13 +67,13 @@ export const prose = defineRecipe({
     },
     '& th, & td': {
       padding: '0.5em 0.75em',
-      border: '1px solid {colors.border.glass}',
+      border: '1px solid {colors.gray.a6}',
     },
     '& th': {
-      background: '{colors.bg.glass}',
+      background: '{colors.gray.a2}',
       fontWeight: '600',
       textAlign: 'left',
     },
-    '& td': { color: '{colors.text.secondary}' },
+    '& td': { color: '{colors.fg.muted}' },
   },
 });

@@ -1,6 +1,8 @@
 use crate::jsonl_store::{JsonlStore, ReadPage};
+use chrono::Utc;
 use genai::chat::{ChatMessage as GenaiChatMessage, ChatRequest};
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -23,7 +25,9 @@ pub enum ChatMessage {
         msg: String,
         ts: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        output: Option<String>,
+        terminal: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal_marker: Option<String>,
     },
     Assistant {
         #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -61,6 +65,15 @@ pub struct ChatSessionInfo {
 pub struct ChatPage {
     pub messages: Vec<ChatMessage>,
     pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatUserMessagePayload {
+    terminal: Option<String>,
+    terminal_marker: Option<String>,
+    commandline: Option<String>,
+    msg: Option<String>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -110,10 +123,7 @@ pub struct ChatSession {
 impl ChatSession {
     /// Create a new chat session.
     pub fn new(app_data_dir: &std::path::Path) -> Result<Self, String> {
-        let secs = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| e.to_string())?;
-        let id = format!("{}", secs.as_secs());
+        let id = Utc::now().format("%Y-%m-%d_%H%M%S").to_string();
 
         let store_file = format!("chat-{id}.jsonl");
 
@@ -136,14 +146,15 @@ impl ChatSession {
     }
 
     /// Append a user message and return its byte-offset ID.
-    pub fn append_user(&self, msg: String) -> Result<String, String> {
+    pub fn append_user(&self, payload: ChatUserMessagePayload) -> Result<String, String> {
         let ts = now_timestamp();
         let message = ChatMessage::User {
             id: String::new(),
-            commandline: None,
-            msg,
+            msg: payload.msg.unwrap_or_default(),
             ts,
-            output: None,
+            terminal: payload.terminal,
+            terminal_marker: payload.terminal_marker,
+            commandline: payload.commandline,
         };
         let id = self.store.write(message).map_err(|e| e.to_string())?;
         Ok(id.to_string())
@@ -195,7 +206,7 @@ pub fn read_chat_messages(
 
 #[tauri::command]
 pub async fn send_chat_message(
-    text: String,
+    payload: ChatUserMessagePayload,
     app: AppHandle,
     session: State<'_, ChatSession>,
 ) -> Result<(), String> {
@@ -209,11 +220,9 @@ pub async fn send_chat_message(
     }
 
     // Append and broadcast the user message.
-    let user_id = session.append_user(text).inspect_err(|_| {
+    let user_id = session.append_user(payload).inspect_err(|_| {
         session.generating.store(false, Ordering::SeqCst);
     })?;
-
-    emit_messages_changed(&app, user_id);
 
     // Capture what the spawned task needs, then release the State borrow.
     let generating = session.generating.clone();
@@ -222,6 +231,8 @@ pub async fn send_chat_message(
     let store_file = session.store_file.clone();
 
     tauri::async_runtime::spawn(async move {
+        // TODO: fix
+
         // Reconstruct a store handle for reading/writing from this task.
         let store = JsonlStore::<ChatMessage>::new(&store_dir, &store_file)
             .expect("failed to reopen chat store")
@@ -264,6 +275,8 @@ pub async fn send_chat_message(
         }
 
         generating.store(false, Ordering::SeqCst);
+
+        emit_messages_changed(&app, user_id);
     });
 
     Ok(())

@@ -15,7 +15,7 @@ use tauri::{async_runtime::Mutex as AsyncMutex, AppHandle, Emitter, Manager, Sta
 /// Bash integration script embedded at compile time.
 static BASH_INTEGRATION: &str = include_str!("../assets/bash-integration.sh");
 
-struct AppState {
+struct TerminalSession {
     pty_pair: Arc<AsyncMutex<PtyPair>>,
     writer: Arc<AsyncMutex<Box<dyn Write + Send>>>,
 }
@@ -39,7 +39,7 @@ struct ShellEventPayload {
 }
 
 #[tauri::command]
-async fn create_shell(state: State<'_, AppState>) -> Result<(), String> {
+async fn create_shell(state: State<'_, TerminalSession>) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let mut cmd = CommandBuilder::new("powershell.exe");
 
@@ -78,12 +78,12 @@ async fn create_shell(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn write_to_pty(data: &str, state: State<'_, AppState>) -> Result<(), ()> {
+async fn write_to_pty(data: &str, state: State<'_, TerminalSession>) -> Result<(), ()> {
     write!(state.writer.lock().await, "{}", data).map_err(|_| ())
 }
 
 #[tauri::command]
-async fn resize_pty(rows: u16, cols: u16, state: State<'_, AppState>) -> Result<(), ()> {
+async fn resize_pty(rows: u16, cols: u16, state: State<'_, TerminalSession>) -> Result<(), ()> {
     state
         .pty_pair
         .lock()
@@ -171,7 +171,7 @@ pub fn run() {
 
             Ok(())
         })
-        .manage(AppState {
+        .manage(TerminalSession {
             pty_pair: Arc::new(AsyncMutex::new(pty_pair)),
             writer: Arc::new(AsyncMutex::new(writer)),
         })

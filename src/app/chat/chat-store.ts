@@ -5,8 +5,11 @@ import {
   onChatGenerationError,
   onChatMessagesChanged,
   readChatMessages,
+  type SendChatMessageParams,
   sendChatMessage,
 } from '@/generated';
+import { terminalSections } from '../terminal';
+import type { SectionSnapshot } from '../terminal/terminal-sections';
 
 interface ChatState {
   messages: ChatMessage[];
@@ -96,13 +99,33 @@ async function pull() {
   }
 }
 
-async function send(text: string) {
+async function send(msg: string) {
   state.isGenerating = true;
   state.error = null;
   notify();
 
+  const previousMarker =
+    state.messages.findLast((message) => message.type === 'User')?.terminal_marker ?? undefined;
+
+  const lastExecutedMarker = terminalSections.getLastExecutedSectionId();
+
+  const sections = terminalSections.getSectionShapshots(previousMarker);
+
+  const payload: SendChatMessageParams['payload'] = {};
+  if (msg) payload.msg = msg;
+  if (lastExecutedMarker) payload.terminalMarker = lastExecutedMarker;
+
+  const lastSection = sections.at(-1);
+  if (lastSection !== undefined && lastSection.id === terminalSections.getLastSectionId()) {
+    payload.commandline = lastSection.command;
+  }
+
+  if (sections.length) {
+    payload.terminal = formatTerminalSections(sections);
+  }
+
   try {
-    await sendChatMessage({ text });
+    await sendChatMessage({ payload });
     // New messages arrive via the pull triggered by the BE event.
   } catch (e) {
     state.error = String(e);
@@ -111,7 +134,28 @@ async function send(text: string) {
   }
 }
 
-// Initialise on module load (mirrors the "global, outside component" intent).
+function formatTerminalSections(sections: SectionSnapshot[]): string {
+  return sections
+    .reduce((acc, section) => {
+      const isSectionExecuted = section.output !== undefined;
+      return `${acc}
+<prompt>
+${section.prompt}
+</prompt>${
+        isSectionExecuted
+          ? `
+<command>
+${section.command ?? ''}
+</command>
+<output>
+${section.output ?? ''}
+</output>`
+          : ''
+      }`;
+    }, '')
+    .trim();
+}
+
 void init();
 
 export const chatStore = { getSnapshot, subscribe, send };

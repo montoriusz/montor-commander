@@ -26,13 +26,14 @@ Uses pnpm.
 
 ## Conventions
 
+- Save Implementation plans in `src/implementation-plans`.
 - Frontend is TypeScript + React; keep `tsc` passing.
 - xterm.js for used as a terminal emulator.
 - There is an assistant chat next to the terminal.
+- Do not edit generated files in `src/generated/`; regenerate them instead.
 - Styling uses Panda CSS (`styled-system/`) and Ark UI primitives — avoid raw CSS unless necessary.
 - Backend is Rust; run `cargo check` in `src-tauri/`.
-- Do not edit generated files in `src/generated/`; regenerate them instead.
-- Save Implementation plans in `src/implementation-plans`.
+- In rust, write async code using `tokio` where it has advantages.
 
 ### File Naming (`src/`)
 

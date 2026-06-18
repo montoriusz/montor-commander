@@ -1,14 +1,13 @@
+mod generation;
+
 use crate::jsonl_store::{JsonlStore, ReadPage};
 use chrono::Utc;
-use genai::chat::{ChatMessage as GenaiChatMessage, ChatRequest};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, State};
-
-const MODEL: &str = "gemini-3.1-flash-lite";
 
 // ---------------------------------------------------------------------------
 // ChatMessage (stored in JSONL)
@@ -231,72 +230,27 @@ pub async fn send_chat_message(
     let store_file = session.store_file.clone();
 
     tauri::async_runtime::spawn(async move {
-        // TODO: fix
-
         // Reconstruct a store handle for reading/writing from this task.
         let store = JsonlStore::<ChatMessage>::new(&store_dir, &store_file)
             .expect("failed to reopen chat store")
             .with_on_read(|_msg: &mut ChatMessage, _offset: u32| {});
 
-        // Build conversation history for genai.
-        let req = match build_history(&store) {
-            Ok(req) => req,
+        let ts = now_timestamp();
+
+        match generation::generate_assistant_reply(&client, &store, &ts).await {
+            Ok(assistant_id) => {
+                emit_messages_changed(&app, assistant_id.to_string());
+            }
             Err(e) => {
                 emit_generation_error(&app, e);
-                generating.store(false, Ordering::SeqCst);
-                return;
-            }
-        };
-
-        // Call genai.
-        match client.exec_chat(MODEL, req, None).await {
-            Ok(response) => {
-                let content = response.first_text().unwrap_or("").to_string();
-                let ts = now_timestamp();
-                let message = ChatMessage::Assistant {
-                    id: String::new(),
-                    commandline: None,
-                    msg: content,
-                    ts,
-                    model: MODEL.to_string(),
-                };
-                match store.write(message) {
-                    Ok(assistant_id) => {
-                        emit_messages_changed(&app, assistant_id.to_string());
-                    }
-                    Err(e) => {
-                        emit_generation_error(&app, e.to_string());
-                    }
-                }
-            }
-            Err(e) => {
-                emit_generation_error(&app, e.to_string());
             }
         }
 
         generating.store(false, Ordering::SeqCst);
-
         emit_messages_changed(&app, user_id);
     });
 
     Ok(())
-}
-
-/// Build a ChatRequest from all messages in the store.
-fn build_history(store: &JsonlStore<ChatMessage>) -> Result<ChatRequest, String> {
-    let page = store.read(0, None).map_err(|e| e.to_string())?;
-    let mut req = ChatRequest::new(vec![]);
-    for msg in &page.items {
-        match msg {
-            ChatMessage::User { msg, .. } => {
-                req = req.append_message(GenaiChatMessage::user(msg.as_str()));
-            }
-            ChatMessage::Assistant { msg, .. } => {
-                req = req.append_message(GenaiChatMessage::assistant(msg.as_str()));
-            }
-        }
-    }
-    Ok(req)
 }
 
 // ---------------------------------------------------------------------------

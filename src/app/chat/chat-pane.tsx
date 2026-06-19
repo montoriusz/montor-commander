@@ -2,7 +2,7 @@ import { ArrowUp } from 'lucide-react';
 import { useState } from 'react';
 import { Box, Flex } from 'styled-system/jsx';
 import type { ChatMessage } from '@/generated';
-import { IconButton, Textarea } from '@/ui/primitives';
+import { Code, IconButton, Textarea } from '@/ui/primitives';
 import * as ScrollArea from '@/ui/primitives/scroll-area';
 import { Markdown } from '../shared/markdown';
 import { useChat } from './use-chat';
@@ -20,6 +20,13 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         bg={isUser ? 'gray.surface.bg' : undefined}
       >
         <Markdown content={msg.msg} />
+        {!isUser && msg.commandline && (
+          // TODO: adjust color palette to match accepted/rejected status
+          // TODO: extract to a separate collapsible component (collapsed to 1st line by default)
+          <Code colorPalette="amber" variant="surface" block fontSize="xs" wordBreak="break-all">
+            {msg.commandline}
+          </Code>
+        )}
       </Box>
     </Flex>
   );

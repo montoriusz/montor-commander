@@ -5,5 +5,5 @@
 {% endif -%}
 <commandline>{{ commandline.unwrap_or("") }}</commandline>
 {% if !msg.is_empty() -%}
-<msg>{{ msg }}</msg>
+<user_message>{{ msg }}</user_message>
 {%- endif %}

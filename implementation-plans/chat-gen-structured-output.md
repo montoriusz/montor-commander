@@ -145,7 +145,7 @@ Static (no template vars needed, but keep it a template for consistency and easy
     - `<command>…</command>` — a command the user ran.
     - `<output>…</output>` — terminal output captured after that command.
   - A `<commandline>…</commandline>` block with the user's current, not-yet-executed commandline (may be empty).
-  - An optional `<msg>…</msg>` block with the user's chat message.
+  - An optional `<user_message>…</user_message>` block with the user's chat message.
 - Explain the **expected output contract**: respond with structured JSON `{ "msg": string, "commandline"?: string }`.
   - `msg` is the conversational reply.
   - `commandline`, when present, is a single suggested bash commandline intended to replace the user's current commandline; omit it when no command suggestion is appropriate.
@@ -178,7 +178,7 @@ Template body (whitespace-trimmed via Askama `{%- -%}` where helpful):
 ```
 {% if let Some(terminal) = terminal %}<terminal>{{ terminal|safe }}</terminal>
 {% endif %}<commandline>{{ commandline.unwrap_or("")|safe }}</commandline>
-{% if !msg.is_empty() %}<msg>{{ msg|safe }}</msg>{% endif %}
+{% if !msg.is_empty() %}<user_message>{{ msg|safe }}</user_message>{% endif %}
 ```
 
 - Use the `safe` filter (or disable escaping) because the terminal content is a raw, unescaped XML-like stream that must be quoted verbatim. Askama HTML-escapes by default for `.html` templates; using a `.txt` extension avoids HTML auto-escaping, but still apply `safe`/verify the configured escaper to guarantee no escaping.

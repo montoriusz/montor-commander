@@ -11,7 +11,7 @@ type MarkingPoint = 'PromptStart' | 'PromptEnd' | 'CommandStart' | 'CommandEnd';
 interface Section {
   id: string;
   markers: Record<MarkingPoint, BufferMarker | undefined>;
-  promptDecoration: IDecoration | undefined;
+  promptDecorations: IDecoration[];
 }
 
 export interface SectionSnapshot {
@@ -178,7 +178,7 @@ function createSection(id: string): Section {
       CommandStart: undefined,
       CommandEnd: undefined,
     },
-    promptDecoration: undefined,
+    promptDecorations: [],
   };
 }
 
@@ -208,26 +208,36 @@ const markingBorderColor = token('colors.green.surface.border');
 const markingBgColor = '#121b17';
 const markingRulerColor = '#20573e';
 
-function updateSectionDecorations(term: Terminal, section: Section, force = false) {
-  if (
-    (!section.promptDecoration || force) &&
-    section.markers.PromptStart &&
-    section.markers.PromptEnd &&
-    section.markers.CommandStart
-  ) {
-    if (section.promptDecoration) {
-      section.promptDecoration.dispose();
-      section.promptDecoration = undefined;
+function updateSectionDecorations(term: Terminal, section: Section) {
+  if (section.markers.PromptEnd && section.markers.CommandStart) {
+    // Clean up existing decorations
+    for (const decoration of section.promptDecorations) {
+      decoration.dispose();
     }
+    section.promptDecorations = [];
 
-    const marker = term.registerMarker(
-      section.markers.PromptStart.y - term.buffer.active.cursorY - term.buffer.active.baseY,
-    );
-    if (marker) {
+    // Draw new decorations
+    const startX = section.markers.PromptEnd.x;
+    const startY = section.markers.PromptEnd.y;
+    const endY = section.markers.CommandStart.y - 1;
+
+    // If CommandStart is at column 0, the prompt content doesn't extend to that line
+    if (startY > endY) return;
+
+    const activeBuffer = term.buffer.active;
+    let isFirstLine = true;
+    for (let y = startY; y <= endY; y++) {
+      const x = isFirstLine ? startX : 0;
+      const width = term.cols - x;
+      if (width <= 0) continue;
+
+      const marker = term.registerMarker(y - activeBuffer.cursorY - activeBuffer.baseY);
+      if (!marker) continue;
+
       const decoration = term.registerDecoration({
         marker,
-        x: section.markers.PromptStart.x,
-        width: term.cols - section.markers.PromptStart.x,
+        x,
+        width,
         layer: 'bottom',
         backgroundColor: markingBgColor,
         overviewRulerOptions: {
@@ -235,16 +245,21 @@ function updateSectionDecorations(term: Terminal, section: Section, force = fals
           position: 'full',
         },
       });
+
       if (decoration) {
-        section.promptDecoration = decoration;
-        decoration.onRender((element: HTMLElement) => {
-          element.style.borderTop = `2px solid ${markingBorderColor}`;
-          element.style.transform = `translateY(-1px)`;
-        });
+        section.promptDecorations.push(decoration);
+        if (isFirstLine) {
+          decoration.onRender((element: HTMLElement) => {
+            element.style.borderTop = `2px solid ${markingBorderColor}`;
+            element.style.transform = `translateY(-1px)`;
+          });
+        }
         decoration.onDispose(() => {
           decoration.marker.dispose();
-          section.promptDecoration = decoration;
+          const idx = section.promptDecorations.indexOf(decoration);
+          if (idx !== -1) section.promptDecorations.splice(idx, 1);
         });
+        isFirstLine = false;
       } else {
         marker.dispose();
       }

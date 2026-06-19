@@ -31,6 +31,8 @@ pub enum ChatMessage {
     Assistant {
         #[serde(default, skip_serializing_if = "String::is_empty")]
         id: String,
+
+        // TODO: allow multiple suggestions
         #[serde(default, skip_serializing_if = "Option::is_none")]
         commandline: Option<String>,
         msg: String,
@@ -223,6 +225,8 @@ pub async fn send_chat_message(
         session.generating.store(false, Ordering::SeqCst);
     })?;
 
+    emit_messages_changed(&app, user_id);
+
     // Capture what the spawned task needs, then release the State borrow.
     let generating = session.generating.clone();
     let client = session.client.clone();
@@ -247,7 +251,6 @@ pub async fn send_chat_message(
         }
 
         generating.store(false, Ordering::SeqCst);
-        emit_messages_changed(&app, user_id);
     });
 
     Ok(())

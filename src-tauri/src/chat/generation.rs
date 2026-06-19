@@ -184,7 +184,7 @@ mod tests {
 
         assert!(rendered.contains("<terminal>"));
         assert!(rendered.contains("<commandline>cat file.txt</commandline>"));
-        assert!(rendered.contains("<msg>What does this file contain?</msg>"));
+        assert!(rendered.contains("<user_message>What does this file contain?</user_message>"));
         // Content inside tags must be unescaped.
         assert!(rendered.contains("<prompt>$</prompt>"));
     }
@@ -201,7 +201,7 @@ mod tests {
 
         assert!(!rendered.contains("<terminal>"));
         assert!(rendered.contains("<commandline></commandline>"));
-        assert!(rendered.contains("<msg>hello</msg>"));
+        assert!(rendered.contains("<user_message>hello</user_message>"));
     }
 
     #[test]
@@ -214,7 +214,7 @@ mod tests {
         .render()
         .unwrap();
 
-        assert!(!rendered.contains("<msg>"));
+        assert!(!rendered.contains("<user_message>"));
         assert!(rendered.contains("<commandline>ls</commandline>"));
     }
 

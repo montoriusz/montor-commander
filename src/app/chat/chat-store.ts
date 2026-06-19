@@ -20,16 +20,23 @@ interface ChatState {
 
 type Listener = () => void;
 
-const state: ChatState = {
+let state: ChatState = {
   messages: [],
   cursor: null,
   isGenerating: false,
   error: null,
 };
 
+const PULL_DEBOUNCE_MS = 100;
+
+function setState(patch: Partial<ChatState>) {
+  state = { ...state, ...patch };
+}
+
 const listeners = new Set<Listener>();
 
 function notify() {
+  console.log('notify', listeners.size);
   for (const listener of listeners) {
     listener();
   }
@@ -53,17 +60,28 @@ async function init() {
 
     // Initial pull — load all messages from the beginning.
     const page: ChatPage = await readChatMessages({ afterCursor: null });
-    state.messages = page.messages;
-    state.cursor = page.nextCursor ?? null;
+    setState({
+      messages: page.messages,
+      cursor: page.nextCursor ?? null,
+    });
 
     // Register event listeners.
+    let pullTimer: ReturnType<typeof setTimeout> | null = null;
     onChatMessagesChanged((_payload) => {
-      void pull();
+      console.log('chat-messages-changed', _payload);
+      if (pullTimer !== null) clearTimeout(pullTimer);
+      pullTimer = setTimeout(() => {
+        pullTimer = null;
+        console.log('pulling...');
+        void pull();
+      }, PULL_DEBOUNCE_MS);
     });
 
     onChatGenerationError((payload) => {
-      state.error = payload.message;
-      state.isGenerating = false;
+      setState({
+        error: payload.message,
+        isGenerating: false,
+      });
       notify();
     });
   } catch (e) {
@@ -82,16 +100,13 @@ async function pull() {
     const existingIds = new Set(state.messages.map((m) => m.id));
     const toAppend = page.messages.filter((m) => !existingIds.has(m.id));
 
-    if (toAppend.length > 0) {
-      state.messages.push(...toAppend);
-    }
+    if (toAppend.length === 0) return;
 
-    state.cursor = page.nextCursor ?? state.cursor;
-
-    // If any appended message is an assistant message, generation is done.
-    if (toAppend.some((m) => m.type === 'Assistant')) {
-      state.isGenerating = false;
-    }
+    setState({
+      messages: [...state.messages, ...toAppend],
+      cursor: page.nextCursor ?? state.cursor,
+      isGenerating: toAppend.some((m) => m.type === 'Assistant') ? false : state.isGenerating,
+    });
 
     notify();
   } catch (e) {
@@ -100,8 +115,7 @@ async function pull() {
 }
 
 async function send(msg: string) {
-  state.isGenerating = true;
-  state.error = null;
+  setState({ isGenerating: true, error: null });
   notify();
 
   const previousMarker =
@@ -128,8 +142,7 @@ async function send(msg: string) {
     await sendChatMessage({ payload });
     // New messages arrive via the pull triggered by the BE event.
   } catch (e) {
-    state.error = String(e);
-    state.isGenerating = false;
+    setState({ error: String(e), isGenerating: false });
     notify();
   }
 }

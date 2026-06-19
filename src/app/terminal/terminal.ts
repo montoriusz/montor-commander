@@ -27,6 +27,7 @@ terminal.loadAddon(fitAddon);
 const terminalSections = new TerminalSections();
 terminal.loadAddon(terminalSections);
 
+// TODO: convert to channel
 const unlistenPromise = listen<{ data: string }>('pty-output', (e) => {
   terminal.write(e.payload.data);
 });

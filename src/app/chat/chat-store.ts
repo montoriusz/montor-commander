@@ -13,18 +13,18 @@ import type { SectionSnapshot } from '../terminal/terminal-sections';
 
 interface ChatState {
   messages: ChatMessage[];
-  cursor: string | null;
+  cursor: string | undefined;
   isGenerating: boolean;
-  error: string | null;
+  error: string | undefined;
 }
 
 type Listener = () => void;
 
 let state: ChatState = {
   messages: [],
-  cursor: null,
+  cursor: undefined,
   isGenerating: false,
-  error: null,
+  error: undefined,
 };
 
 const PULL_DEBOUNCE_MS = 100;
@@ -36,7 +36,6 @@ function setState(patch: Partial<ChatState>) {
 const listeners = new Set<Listener>();
 
 function notify() {
-  console.log('notify', listeners.size);
   for (const listener of listeners) {
     listener();
   }
@@ -62,17 +61,15 @@ async function init() {
     const page: ChatPage = await readChatMessages({ afterCursor: null });
     setState({
       messages: page.messages,
-      cursor: page.nextCursor ?? null,
+      cursor: page.nextCursor ?? undefined,
     });
 
     // Register event listeners.
-    let pullTimer: ReturnType<typeof setTimeout> | null = null;
+    let pullTimer: ReturnType<typeof setTimeout> | undefined;
     onChatMessagesChanged((_payload) => {
-      console.log('chat-messages-changed', _payload);
-      if (pullTimer !== null) clearTimeout(pullTimer);
+      if (pullTimer != null) clearTimeout(pullTimer);
       pullTimer = setTimeout(() => {
-        pullTimer = null;
-        console.log('pulling...');
+        pullTimer = undefined;
         void pull();
       }, PULL_DEBOUNCE_MS);
     });
@@ -115,19 +112,27 @@ async function pull() {
 }
 
 async function send(msg: string) {
-  setState({ isGenerating: true, error: null });
+  setState({ isGenerating: true, error: undefined });
   notify();
 
-  const previousMarker =
-    state.messages.findLast((message) => message.type === 'User')?.terminal_marker ?? undefined;
+  const lastMarker = terminalSections.getLastSectionId();
 
-  const lastExecutedMarker = terminalSections.getLastExecutedSectionId();
+  const previousMarker = (
+    state.messages.findLast((message) => {
+      return (
+        message.type === 'User' &&
+        message.terminal_marker != null &&
+        message.terminal_marker !== lastMarker
+      );
+    }) as { terminal_marker: string } | undefined
+  )?.terminal_marker;
 
   const sections = terminalSections.getSectionShapshots(previousMarker);
 
-  const payload: SendChatMessageParams['payload'] = {};
+  const payload: SendChatMessageParams['payload'] = {
+    terminalMarker: lastMarker,
+  };
   if (msg) payload.msg = msg;
-  if (lastExecutedMarker) payload.terminalMarker = lastExecutedMarker;
 
   const lastSection = sections.at(-1);
   if (lastSection !== undefined && lastSection.id === terminalSections.getLastSectionId()) {

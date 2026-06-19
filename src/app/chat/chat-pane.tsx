@@ -2,32 +2,39 @@ import { ArrowUp } from 'lucide-react';
 import { useState } from 'react';
 import { Box, Flex } from 'styled-system/jsx';
 import type { ChatMessage } from '@/generated';
-import { Code, IconButton, Textarea } from '@/ui/primitives';
+import { CommandlineSuggestion } from '@/ui/composites/commandline-suggestion';
+import { IconButton, Textarea } from '@/ui/primitives';
 import * as ScrollArea from '@/ui/primitives/scroll-area';
 import { Markdown } from '../shared/markdown';
 import { useChat } from './use-chat';
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+interface MessageBubbleProps {
+  msg: ChatMessage;
+  isCurrentSection: boolean;
+}
+
+function MessageBubble({ msg, isCurrentSection: isCurretSection }: MessageBubbleProps) {
   const isUser = msg.type === 'User';
   return (
-    <Flex my="3" justifyContent={isUser ? 'flex-end' : 'flex-start'} minW="0" maxW="full">
-      <Box
+    <Flex py="2.5" justifyContent={isUser ? 'flex-end' : 'flex-start'} minW="0" maxW="full">
+      <Flex
         maxW="11/12"
-        px={isUser ? '3' : undefined}
-        py="1"
+        px={isUser ? '3r' : undefined}
+        py={isUser ? '0.5r' : undefined}
         borderRadius="l2"
         borderWidth={isUser ? '1' : '0'}
         bg={isUser ? 'gray.surface.bg' : undefined}
+        flexDirection="column"
+        gap="2"
       >
         <Markdown content={msg.msg} />
         {!isUser && msg.commandline && (
-          // TODO: adjust color palette to match accepted/rejected status
-          // TODO: extract to a separate collapsible component (collapsed to 1st line by default)
-          <Code colorPalette="amber" variant="surface" block fontSize="xs" wordBreak="break-all">
-            {msg.commandline}
-          </Code>
+          <CommandlineSuggestion
+            status={isCurretSection ? 'pending' : undefined}
+            commandline={msg.commandline}
+          />
         )}
-      </Box>
+      </Flex>
     </Flex>
   );
 }
@@ -50,6 +57,8 @@ export function ChatPane() {
     }
   }
 
+  const currentSectionIdx = isGenerating ? -1 : messages.length - 1;
+
   return (
     <Flex flexDirection="column" h="full" pr="0.5" flexGrow="1" overflow="hidden">
       <Box
@@ -57,20 +66,20 @@ export function ChatPane() {
         borderBottomWidth="1px"
         borderColor="border"
         fontWeight="semibold"
-        fontSize="sm"
+        fontSize="lg"
         bg="gray.4"
       >
         Terminal Assistant
       </Box>
 
       <Flex flexDirection="column" bg="gray.2" flex="1" borderRadius="l3" overflow="hidden">
-        <ScrollArea.Root flex="1" size="lg" fontSize="sm">
+        <ScrollArea.Root flex="1" size="lg">
           <ScrollArea.Viewport py="1" pr="3" pl="4">
-            {messages.map((msg) => (
-              <MessageBubble key={msg.id} msg={msg} />
+            {messages.map((msg, idx) => (
+              <MessageBubble key={msg.id} msg={msg} isCurrentSection={idx === currentSectionIdx} />
             ))}
             {isGenerating && (
-              <Box my="3" color="fg.muted" fontSize="sm">
+              <Box my="3" color="fg.muted">
                 Thinking…
               </Box>
             )}
@@ -78,14 +87,13 @@ export function ChatPane() {
         </ScrollArea.Root>
 
         {error && (
-          <Box px="3" py="1" fontSize="xs" color="red.4">
+          <Box px="3" py="1" color="red.4">
             {error}
           </Box>
         )}
 
         <Flex p="2" position="relative">
           <Textarea
-            size="sm"
             autoresize
             placeholder="Message the assistant"
             flex="1"
@@ -96,7 +104,6 @@ export function ChatPane() {
             onKeyDown={handleKeyDown}
           />
           <IconButton
-            size="sm"
             borderRadius="full"
             position="absolute"
             right="4"

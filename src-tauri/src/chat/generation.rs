@@ -18,14 +18,19 @@ const MODEL: &str = "gemini-3.1-flash-lite";
 // ---------------------------------------------------------------------------
 
 /// Shape the LLM is asked to produce via structured-output JSON schema.
+///
+/// Both fields are always present in the contract. An empty string is the
+/// sentinel for "nothing here": no reply text (`msg`) or no command suggestion
+/// (`commandline`).
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AssistantOutput {
-    /// Natural-language reply shown in the chat.
+    /// Natural-language reply shown in the chat. Empty when there is nothing to say.
+    #[serde(default)]
     pub msg: String,
-    /// Suggested commandline to replace the user's commandline. Omitted when no suggestion.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub commandline: Option<String>,
+    /// Suggested commandline to replace the user's commandline. Empty when no suggestion.
+    #[serde(default)]
+    pub commandline: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -56,14 +61,14 @@ fn response_format() -> ChatResponseFormat {
             "properties": {
                 "msg": {
                     "type": "string",
-                    "description": "Assistant reply to the user."
+                    "description": "Assistant reply to the user. Use an empty string when there is nothing to say."
                 },
                 "commandline": {
-                    "type": ["string", "null"],
-                    "description": "Suggested bash commandline to replace the user's current commandline, or null."
+                    "type": "string",
+                    "description": "Suggested bash commandline to replace the user's current commandline. Use an empty string when there is no command to suggest."
                 }
             },
-            "required": ["msg"],
+            "required": ["msg", "commandline"],
             "additionalProperties": false
         }),
     );
@@ -112,7 +117,7 @@ fn build_history(store: &JsonlStore<ChatMessage>) -> Result<ChatRequest, String>
                 // produces, so the history stays consistent with the contract.
                 let prior = AssistantOutput {
                     msg: msg.clone(),
-                    commandline: commandline.clone(),
+                    commandline: commandline.clone().unwrap_or_default(),
                 };
                 let content = serde_json::to_string(&prior)
                     .map_err(|e| format!("failed to serialize assistant history: {e}"))?;
@@ -152,9 +157,13 @@ pub(crate) async fn generate_assistant_reply(
     let parsed: AssistantOutput = serde_json::from_str(raw)
         .map_err(|e| format!("failed to parse assistant output: {e}; raw: {raw}"))?;
 
+    // The contract requires `commandline` to always be present, using an empty
+    // string to mean "no suggestion". Normalize that sentinel back to `None`.
+    let commandline = Some(parsed.commandline).filter(|s| !s.is_empty());
+
     let message = ChatMessage::Assistant {
         id: String::new(),
-        commandline: parsed.commandline,
+        commandline,
         msg: parsed.msg,
         ts: now_ts.to_string(),
         model: MODEL.to_string(),
@@ -222,24 +231,25 @@ mod tests {
     fn assistant_output_roundtrip() {
         let output = AssistantOutput {
             msg: "Try this".into(),
-            commandline: Some("ls -la".into()),
+            commandline: "ls -la".into(),
         };
         let json = serde_json::to_string(&output).unwrap();
         let parsed: AssistantOutput = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.msg, "Try this");
-        assert_eq!(parsed.commandline.as_deref(), Some("ls -la"));
+        assert_eq!(parsed.commandline, "ls -la");
     }
 
     #[test]
-    fn assistant_output_commandline_omitted() {
+    fn assistant_output_renders_both_fields_when_empty() {
         let output = AssistantOutput {
             msg: "No command needed".into(),
-            commandline: None,
+            commandline: String::new(),
         };
         let json = serde_json::to_string(&output).unwrap();
-        // skip_serializing_if should omit the field entirely.
-        assert!(!json.contains("commandline"));
+        // Both fields are always rendered; empty is the "nothing here" sentinel.
+        assert!(json.contains("\"msg\":"));
+        assert!(json.contains("\"commandline\":\"\""));
         let parsed: AssistantOutput = serde_json::from_str(&json).unwrap();
-        assert!(parsed.commandline.is_none());
+        assert!(parsed.commandline.is_empty());
     }
 }

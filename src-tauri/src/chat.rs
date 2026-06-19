@@ -1,7 +1,7 @@
 mod generation;
 
 use crate::jsonl_store::{JsonlStore, ReadPage};
-use chrono::Utc;
+use chrono::{Local, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::path::PathBuf;
@@ -261,8 +261,5 @@ pub async fn send_chat_message(
 // ---------------------------------------------------------------------------
 
 fn now_timestamp() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    format!("{}", secs.as_secs())
+    Local::now().to_rfc3339()
 }

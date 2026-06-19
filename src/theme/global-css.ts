@@ -6,7 +6,8 @@ export const globalCss = {
       '--global-color-selection': 'colors.colorPalette.subtle.bg',
       '--global-color-focus-ring': 'colors.colorPalette.solid.bg',
     },
-    html: {
+    ':root': {
+      fontSize: '90%',
       colorPalette: 'green',
       background: 'canvas',
     },

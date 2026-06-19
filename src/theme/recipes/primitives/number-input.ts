@@ -1,6 +1,6 @@
-import { numberInputAnatomy } from '@ark-ui/react/anatomy'
-import { defineSlotRecipe } from '@pandacss/dev'
-import { input } from './input'
+import { numberInputAnatomy } from '@ark-ui/react/anatomy';
+import { defineSlotRecipe } from '@pandacss/dev';
+import { input } from './input';
 
 const trigger = {
   alignItems: 'center',
@@ -21,7 +21,7 @@ const trigger = {
   _active: {
     bg: 'gray.surface.bg.active',
   },
-}
+};
 
 export const numberInput = defineSlotRecipe({
   className: 'number-input',
@@ -105,4 +105,4 @@ export const numberInput = defineSlotRecipe({
       },
     },
   },
-})
+});

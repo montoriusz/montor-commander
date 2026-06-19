@@ -1,6 +1,6 @@
-import { pinInputAnatomy } from '@ark-ui/react/anatomy'
-import { defineSlotRecipe } from '@pandacss/dev'
-import { input } from './input'
+import { pinInputAnatomy } from '@ark-ui/react/anatomy';
+import { defineSlotRecipe } from '@pandacss/dev';
+import { input } from './input';
 
 export const pinInput = defineSlotRecipe({
   className: 'pin-input',
@@ -50,4 +50,4 @@ export const pinInput = defineSlotRecipe({
       flushed: { input: input.variants?.variant?.flushed },
     },
   },
-})
+});

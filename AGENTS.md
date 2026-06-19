@@ -8,7 +8,13 @@ A Tauri 2 desktop terminal app. The frontend is TypeScript + Vite using xterm.js
 
 - `src/` — frontend TypeScript + React, with generated Tauri bindings in `src/generated/`.
   - `src/app/` — app components (`app.tsx`) and hooks (`use-terminal.ts`, `terminal-sections.ts`).
-  - `src/ui/primitives/` — Panda CSS / Ark UI primitive components.
+  - `ui/` - Pure UI components, isolated from business logic.
+    - `primitives/` - Panda CSS / Ark UI primitive components.
+    - `composites/` - Composites and domain-specific components.
+    - `layouts/` - Generic slot-based containers for pages and their sections.
+    - `hooks/` - UI component companion hooks, isolated from business logic.
+  - `stories/` - Storybook stories for UI components, mock-ups and other examples.
+  - `theme/` + `panda.config.ts` - Panda CSS theme configuration.
   - `src/theme/` — Panda CSS theme configuration.
   - `src/main.tsx` — React entry point.
 - `src-tauri/` — Rust backend (`src/`, `Cargo.toml`, `tauri.conf.json`).

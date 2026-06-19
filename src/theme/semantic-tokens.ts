@@ -40,6 +40,13 @@ export const semanticTokens = {
       },
     },
 
+    success: {
+      value: {
+        _light: '{colors.green.9}',
+        _dark: '{colors.green.9}',
+      },
+    },
+
     error: {
       value: {
         _light: '{colors.red.9}',

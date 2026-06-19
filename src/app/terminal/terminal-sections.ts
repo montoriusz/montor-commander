@@ -31,7 +31,6 @@ export class TerminalSections implements ITerminalAddon {
 
   activate(terminal: Terminal): void {
     this.terminal = terminal;
-    console.log('register osc133 handler');
 
     const oscHandler = (data: string) => {
       const { marker, aid } = parseOsc133(data);

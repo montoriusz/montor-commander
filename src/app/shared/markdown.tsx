@@ -1,6 +1,6 @@
 import ReactMarkdown, { type Components } from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
 import { Box } from 'styled-system/jsx';
 import { prose } from 'styled-system/recipes';
@@ -20,7 +20,7 @@ const components: Components = {
     const match = /language-(\w+)/.exec(className || '');
     const inline = 'inline' in props ? !!props.inline : false;
     return !inline && match ? (
-      <SyntaxHighlighter style={oneDark} language={match[1]} PreTag="div" {...props}>
+      <SyntaxHighlighter style={tomorrow} language={match[1]} PreTag="div" {...props}>
         {String(children).replace(/\n$/, '')}
       </SyntaxHighlighter>
     ) : (

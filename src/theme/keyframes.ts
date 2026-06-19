@@ -3,20 +3,28 @@ import { defineKeyframes } from '@pandacss/dev';
 export const keyframes = defineKeyframes({
   // collapse
   'expand-height': {
-    from: { height: '0' },
+    from: { height: 'var(--collapsed-height, 0);' },
     to: { height: 'var(--height)' },
   },
   'collapse-height': {
     from: { height: 'var(--height)' },
-    to: { height: '0' },
+    to: { height: 'var(--collapsed-height, 0);' },
+  },
+  'expand-max-height': {
+    from: { maxHeight: 'var(--collapsed-height, 0);' },
+    to: { maxHeight: 'var(--height)' },
+  },
+  'collapse-max-height': {
+    from: { maxHeight: 'var(--height)' },
+    to: { maxHeight: 'var(--collapsed-height, 0);' },
   },
   'expand-width': {
-    from: { width: '0' },
+    from: { width: 'var(--collapsed-width, 0);' },
     to: { width: 'var(--width)' },
   },
   'collapse-width': {
     from: { width: 'var(--width)' },
-    to: { width: '0' },
+    to: { width: 'var(--collapsed-width, 0);' },
   },
   // fade
   'fade-in': {

@@ -147,13 +147,33 @@ pub(crate) async fn generate_assistant_reply(
 ) -> Result<u32, String> {
     let req = build_history(store)?;
 
+    // Log the serialized `ChatRequest` (system prompt + all formatted turns) at
+    // debug level. `ChatRequest` derives `Serialize` and carries no credentials
+    // (the API key lives on the client), so serializing it is safe.
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        match serde_json::to_string_pretty(&req) {
+            Ok(json) => tracing::debug!(model = MODEL, request = %json, "genai request"),
+            Err(e) => tracing::debug!(
+                model = MODEL,
+                error = %e,
+                "failed to serialize genai request for logging"
+            ),
+        }
+    }
+
     let options = ChatOptions::default().with_response_format(response_format());
+
     let response = client
         .exec_chat(MODEL, req, Some(&options))
         .await
         .map_err(|e| e.to_string())?;
 
     let raw = response.first_text().unwrap_or("{}");
+    tracing::debug!(raw = %raw, "genai raw reply text");
+    if let Some(body) = &response.captured_raw_body {
+        tracing::trace!(raw_body = %body, "genai raw provider body");
+    }
+
     let parsed: AssistantOutput = serde_json::from_str(raw)
         .map_err(|e| format!("failed to parse assistant output: {e}; raw: {raw}"))?;
 

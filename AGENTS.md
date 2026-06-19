@@ -18,6 +18,7 @@ A Tauri 2 desktop terminal app. The frontend is TypeScript + Vite using xterm.js
   - `src/theme/` — Panda CSS theme configuration.
   - `src/main.tsx` — React entry point.
 - `src-tauri/` — Rust backend (`src/`, `Cargo.toml`, `tauri.conf.json`).
+  - `src-tauri/src/chat/` — chat backend; `generation.rs` owns all `genai` LLM calls.
 - `index.html` — Vite entry point.
 
 ## Commands
@@ -40,6 +41,11 @@ Uses pnpm.
 - Styling uses Panda CSS (`styled-system/`) and Ark UI primitives — avoid raw CSS unless necessary.
 - Backend is Rust; run `cargo check` in `src-tauri/`.
 - In rust, write async code using `tokio` where it has advantages.
+
+### AI / `genai`
+
+- The `genai` crate drives the assistant. All generation lives in `src-tauri/src/chat/generation.rs`; keep `genai` calls out of `chat.rs` (Tauri/event concerns).
+- The system prompt and each user turn are rendered with Askama templates in `src-tauri/templates/`.
 
 ### File Naming (`src/`)
 

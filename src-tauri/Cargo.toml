@@ -26,6 +26,8 @@ genai = "0.6.5"
 dotenvy = "0.15.7"
 chrono = "0.4.45"
 askama = "0.16.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

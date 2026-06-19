@@ -88,9 +88,15 @@ async function init() {
 
 async function pull() {
   try {
+    console.log('pulling chat messages', { cursor: state.cursor });
     const page: ChatPage = await readChatMessages({
       afterCursor: state.cursor,
     });
+    console.log('pulled chat messages', {
+      nextCursor: page.nextCursor,
+      count: page.messages.length,
+    });
+
     if (page.messages.length === 0) return;
 
     // Dedupe by id

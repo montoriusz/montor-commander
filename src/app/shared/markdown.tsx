@@ -2,6 +2,7 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
+import { cx } from 'styled-system/css';
 import { Box } from 'styled-system/jsx';
 import { prose } from 'styled-system/recipes';
 import { Code } from '@/ui/primitives';
@@ -34,9 +35,14 @@ const components: Components = {
 
 const remarkPlugins = [remarkGfm];
 
-export function Markdown({ content }: { content: string }) {
+export interface MarkdownProps {
+  content: string;
+  className?: string;
+}
+
+export function Markdown({ content, className }: MarkdownProps) {
   return (
-    <Box className={prose()}>
+    <Box className={cx(prose(), className)}>
       <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
         {content}
       </ReactMarkdown>

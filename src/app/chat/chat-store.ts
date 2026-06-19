@@ -8,7 +8,7 @@ import {
   type SendChatMessageParams,
   sendChatMessage,
 } from '@/generated';
-import { terminalSections } from '../terminal';
+import { commandlineController, terminalSections } from '../terminal';
 import type { SectionSnapshot } from '../terminal/terminal-sections';
 
 interface ChatState {
@@ -112,6 +112,11 @@ async function pull() {
     });
 
     notify();
+
+    const lastMessage = toAppend.at(-1);
+    if (lastMessage?.type === 'Assistant' && lastMessage?.commandline) {
+      commandlineController.put(lastMessage.commandline);
+    }
   } catch (e) {
     console.error('chat-store pull failed:', e);
   }
@@ -159,6 +164,7 @@ async function send(msg: string) {
 }
 
 function formatTerminalSections(sections: SectionSnapshot[]): string {
+  // TODO: check for truncated sections (no prompt start marker)
   return sections
     .reduce((acc, section) => {
       const isSectionExecuted = section.output !== undefined;

@@ -1,6 +1,6 @@
 'use client';
 
-import { Play, X } from 'lucide-react';
+import { Play, Terminal, X } from 'lucide-react';
 import { useMemo } from 'react';
 import { css, cx } from 'styled-system/css';
 import {
@@ -9,10 +9,12 @@ import {
 } from 'styled-system/recipes';
 import { Collapsible, IconButton } from '../primitives';
 
+export type CommandlineSuggestionAction = 'execute' | 'put' | 'reject';
+
 export interface CommandlineSuggestionProps extends CommandlineSuggestionVariantProps {
   commandline: string;
   status?: 'pending' | 'accepted' | 'failed' | 'rejected';
-  onAction?: (event: 'accept' | 'reject') => void;
+  onAction?: (event: CommandlineSuggestionAction) => void;
 }
 
 export function CommandlineSuggestion({
@@ -30,7 +32,8 @@ export function CommandlineSuggestion({
 
   const handlers = useMemo(
     () => ({
-      onAccept: () => onAction?.('accept'),
+      onApply: () => onAction?.('execute'),
+      onPut: () => onAction?.('put'),
       onReject: () => onAction?.('reject'),
     }),
     [onAction],
@@ -39,23 +42,34 @@ export function CommandlineSuggestion({
   return (
     <div className={cx(styles.root, statusStyle)}>
       <Collapsible.Root variant="command" collapsedHeight="2.2em" className={styles.command}>
-        <Collapsible.Content minHeight="0 !important">{commandline}</Collapsible.Content>
+        <Collapsible.Content minHeight="0 !important" mb="1" pb="0">
+          {commandline}
+        </Collapsible.Content>
         <Collapsible.Trigger
           className={css({ position: 'absolute', inset: '0' })}
           // aria-label={open ? 'Collapse' : 'Expand'}
         />
         <Collapsible.Indicator />
       </Collapsible.Root>
-      {status === 'pending' && (
-        <div className={styles.actions}>
-          <IconButton colorPalette="green" variant="subtle" size="xs" onClick={handlers.onAccept}>
-            <Play />
-          </IconButton>
-          <IconButton colorPalette="red" variant="subtle" size="xs" onClick={handlers.onReject}>
+      <div className={styles.actions}>
+        <IconButton
+          colorPalette={status === 'pending' ? 'green' : undefined}
+          variant="subtle"
+          size="xs"
+          onClick={handlers.onApply}
+        >
+          <Play />
+        </IconButton>
+        {status === 'pending' ? (
+          <IconButton colorPalette={'red'} variant="subtle" size="xs" onClick={handlers.onReject}>
             <X />
           </IconButton>
-        </div>
-      )}
+        ) : (
+          <IconButton variant="subtle" size="xs" onClick={handlers.onPut}>
+            <Terminal />
+          </IconButton>
+        )}
+      </div>
     </div>
   );
 }

@@ -17,12 +17,12 @@ the Rust backend and forward structured events to the frontend.
 
 OSC 133 markers we care about:
 
-| Marker | Sequence | Meaning |
-| --- | --- | --- |
-| A | `ESC ] 133 ; A ST` | Prompt start |
-| B | `ESC ] 133 ; B ST` | Prompt end / command input start |
-| C | `ESC ] 133 ; C ST` | Command output start (command began executing) |
-| D | `ESC ] 133 ; D ; <exit_code> ST` | Command finished, with exit status |
+| Marker | Sequence                         | Meaning                                        |
+| ------ | -------------------------------- | ---------------------------------------------- |
+| A      | `ESC ] 133 ; A ST`               | Prompt start                                   |
+| B      | `ESC ] 133 ; B ST`               | Prompt end / command input start               |
+| C      | `ESC ] 133 ; C ST`               | Command output start (command began executing) |
+| D      | `ESC ] 133 ; D ; <exit_code> ST` | Command finished, with exit status             |
 
 `ESC` = `0x1b`. `ST` (string terminator) may be BEL (`0x07`) or `ESC \`
 (`0x1b 0x5c`). The parser must accept **both** terminators.
@@ -30,11 +30,13 @@ OSC 133 markers we care about:
 ## Architecture Changes
 
 ### Current model (to be changed)
+
 - Frontend polls `read_from_pty` on every animation frame and writes raw bytes
   to xterm.js.
 - No backend awareness of command boundaries.
 
 ### Target model
+
 - A **backend reader thread** owns the PTY reader. It:
   1. Scans the byte stream for OSC 133 markers.
   2. Emits the raw bytes to the frontend for display (so the markers, which are
@@ -75,6 +77,7 @@ PS1="$PS1"'\[$(__osc133_prompt_start)\]'
 ```
 
 Notes:
+
 - `PS0` (bash >= 4.4) is emitted **after** the command line is accepted but
   **before** execution — perfect for the `C` (output-start) marker.
 - `PROMPT_COMMAND` runs before the prompt; capture `$?` there for the `D` marker.
@@ -84,6 +87,7 @@ Notes:
   line-wrapping math stays correct.
 
 Spawn with:
+
 ```rust
 let mut cmd = CommandBuilder::new("bash");
 cmd.arg("--rcfile");
@@ -100,6 +104,7 @@ spawn. Simpler but pollutes scrollback briefly and is racier. Prefer Option A.
 Create a new module, e.g. `src-tauri/src/osc133.rs`.
 
 Requirements:
+
 - Operates on a streaming byte feed (bytes arrive in arbitrary chunks; a marker
   may be split across two reads). Maintain a small carry-over buffer for a
   partial escape sequence at the end of a chunk.
@@ -109,7 +114,7 @@ Requirements:
 ```rust
 pub enum ShellEvent {
     PromptStart,                 // A
-    CommandStart,                // B
+    CommandStarted,                // B
     CommandFinished { exit_code: i32 }, // C;<code>
 }
 ```
@@ -154,7 +159,9 @@ struct CommandFinishedPayload { exit_code: i32 }
 ```ts
 import { listen } from '@tauri-apps/api/event';
 
-await listen<string>('pty-output', (e) => { void writeToTerminal(e.payload); });
+await listen<string>('pty-output', (e) => {
+  void writeToTerminal(e.payload);
+});
 await listen<{ exit_code: number }>('command-finished', (e) => {
   // hook point: update prompt status, show exit code, etc.
   console.debug('command finished', e.payload.exit_code);
@@ -193,7 +200,7 @@ await listen<{ exit_code: number }>('command-finished', (e) => {
 ## Future: REPL Support (design for it now, implement later)
 
 Keep the parser **program-agnostic**: it detects OSC 133 markers regardless of
-who emits them. To add REPL support later, only the *injection* side changes:
+who emits them. To add REPL support later, only the _injection_ side changes:
 
 - **Python** (`python`): inject via `PYTHONSTARTUP` pointing at a script that sets
   `sys.ps1`/`sys.ps2` to objects whose `__str__` emits A/B markers, and wraps
@@ -206,6 +213,7 @@ who emits them. To add REPL support later, only the *injection* side changes:
   `command-started` / `command-finished` events automatically.
 
 Decisions already made for the future work:
+
 - REPL support is a separate, opt-in tier.
 - "Succeeded vs. raised" is an acceptable stand-in for an exit code in REPLs.
 
@@ -228,4 +236,3 @@ Decisions already made for the future work:
 - `src/main.ts` — switch from polling to `listen`-based events.
 - `src-tauri/capabilities/default.json` — event permission if needed.
 - `src-tauri/Cargo.toml` — no new deps expected (serde/tauri already present).
-`

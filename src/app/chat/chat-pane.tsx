@@ -1,40 +1,61 @@
 import { ArrowUp } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Box, Flex } from 'styled-system/jsx';
 import type { ChatMessage } from '@/generated';
-import { CommandlineSuggestion } from '@/ui/composites/commandline-suggestion';
+import {
+  CommandlineSuggestion,
+  type CommandlineSuggestionAction,
+} from '@/ui/composites/commandline-suggestion';
 import { IconButton, Textarea } from '@/ui/primitives';
 import * as ScrollArea from '@/ui/primitives/scroll-area';
 import { Markdown } from '../shared/markdown';
+import { commandlineController, terminal } from '../terminal';
 import { useChat } from './use-chat';
 
 interface MessageBubbleProps {
   msg: ChatMessage;
   isCurrentSection: boolean;
+  onSuggestionAction: (event: CommandlineSuggestionAction, commandline: string) => void;
 }
 
-function MessageBubble({ msg, isCurrentSection: isCurretSection }: MessageBubbleProps) {
+function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBubbleProps) {
   const isUser = msg.type === 'User';
+  const actionHandler = useCallback(
+    (event: CommandlineSuggestionAction) => {
+      if (!msg.commandline) return;
+      onSuggestionAction(event, msg.commandline);
+    },
+    [msg.commandline, onSuggestionAction],
+  );
+
   return (
     <Flex py="2.5" justifyContent={isUser ? 'flex-end' : 'flex-start'} minW="0" maxW="full">
-      <Flex
-        maxW="11/12"
-        px={isUser ? '3r' : undefined}
-        py={isUser ? '0.5r' : undefined}
-        borderRadius="l2"
-        borderWidth={isUser ? '1' : '0'}
-        bg={isUser ? 'gray.surface.bg' : undefined}
-        flexDirection="column"
-        gap="2"
-      >
-        <Markdown content={msg.msg} />
-        {!isUser && msg.commandline && (
-          <CommandlineSuggestion
-            status={isCurretSection ? 'pending' : undefined}
-            commandline={msg.commandline}
-          />
-        )}
-      </Flex>
+      {msg.type === 'User' ? (
+        <Flex
+          maxW="11/12"
+          px="3r"
+          py="0.5r"
+          borderRadius="l3"
+          borderWidth="1"
+          borderColor="gray.8"
+          bg="black"
+          color="gray.surface.fg"
+          gap="2"
+        >
+          <Markdown content={msg.msg} />
+        </Flex>
+      ) : (
+        <Flex w="11/12" flexDirection="column" gap="2">
+          <Markdown content={msg.msg} />
+          {!isUser && msg.commandline && (
+            <CommandlineSuggestion
+              status={isCurrentSection ? 'pending' : undefined}
+              commandline={msg.commandline}
+              onAction={actionHandler}
+            />
+          )}
+        </Flex>
+      )}
     </Flex>
   );
 }
@@ -57,7 +78,23 @@ export function ChatPane() {
     }
   }
 
-  const currentSectionIdx = isGenerating ? -1 : messages.length - 1;
+  const lastUserCommandline = messages.findLast((msg) => msg.type === 'User')?.commandline ?? '';
+
+  const suggestionActionHandler = useCallback(
+    (event: CommandlineSuggestionAction, command: string) => {
+      if (event === 'reject') {
+        commandlineController.put(lastUserCommandline);
+      } else if (!command) {
+        return;
+      } else if (event === 'execute') {
+        commandlineController.putAndExecute(command);
+      } else if (event === 'put') {
+        commandlineController.put(command);
+        terminal.focus();
+      }
+    },
+    [lastUserCommandline],
+  );
 
   return (
     <Flex flexDirection="column" h="full" pr="0.5" flexGrow="1" overflow="hidden">
@@ -75,9 +112,18 @@ export function ChatPane() {
       <Flex flexDirection="column" bg="gray.2" flex="1" borderRadius="l3" overflow="hidden">
         <ScrollArea.Root flex="1" size="lg">
           <ScrollArea.Viewport py="1" pr="3" pl="4">
-            {messages.map((msg, idx) => (
-              <MessageBubble key={msg.id} msg={msg} isCurrentSection={idx === currentSectionIdx} />
-            ))}
+            {messages.map(
+              (
+                msg, // TODO: subscribe to PTY events to know current section id
+              ) => (
+                <MessageBubble
+                  key={msg.id}
+                  msg={msg}
+                  onSuggestionAction={suggestionActionHandler}
+                  isCurrentSection={false}
+                />
+              ),
+            )}
             {isGenerating && (
               <Box my="3" color="fg.muted">
                 Thinking…

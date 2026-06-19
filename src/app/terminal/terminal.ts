@@ -49,4 +49,13 @@ function unlistenTerminal() {
   void unlistenPromise.then((unlisten) => unlisten());
 }
 
-export { fitTerminal, terminal, terminalSections, unlistenTerminal };
+const commandlineController = {
+  put: (command: string) => {
+    void writeToPty({ data: `\x05\x15${command}` });
+  },
+  putAndExecute: (command: string) => {
+    void writeToPty({ data: `\x05\x15${command}\r` });
+  },
+};
+
+export { commandlineController, fitTerminal, terminal, terminalSections, unlistenTerminal };

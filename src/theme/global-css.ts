@@ -7,7 +7,7 @@ export const globalCss = {
       '--global-color-focus-ring': 'colors.colorPalette.solid.bg',
     },
     ':root': {
-      fontSize: '90%',
+      fontSize: '92%',
       colorPalette: 'green',
       background: 'canvas',
     },

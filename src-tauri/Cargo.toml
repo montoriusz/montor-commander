@@ -1,5 +1,5 @@
 [package]
-name = "tauri-terminal"
+name = "montor-commander"
 version = "0.0.0"
 description = "A Tauri App"
 authors = ["you"]

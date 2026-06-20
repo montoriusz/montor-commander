@@ -68,7 +68,7 @@ async fn create_shell(state: State<'_, TerminalSession>) -> Result<(), String> {
     #[cfg(not(target_os = "windows"))]
     let mut cmd = {
         // Write the bash integration script to a temp file.
-        let rcfile_path = std::env::temp_dir().join("tauri_terminal_bash_integration.sh");
+        let rcfile_path = std::env::temp_dir().join("montorcmd_bash.sh");
         std::fs::write(&rcfile_path, BASH_INTEGRATION).map_err(|e| e.to_string())?;
 
         let mut c = CommandBuilder::new("bash");

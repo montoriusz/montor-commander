@@ -2396,6 +2396,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "montor-commander"
+version = "0.0.0"
+dependencies = [
+ "askama",
+ "chrono",
+ "dotenvy",
+ "genai",
+ "portable-pty",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-typegen",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "muda"
 version = "0.19.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4367,26 +4387,6 @@ dependencies = [
  "webview2-com",
  "windows",
  "wry",
-]
-
-[[package]]
-name = "tauri-terminal"
-version = "0.0.0"
-dependencies = [
- "askama",
- "chrono",
- "dotenvy",
- "genai",
- "portable-pty",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-typegen",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

@@ -10,7 +10,7 @@
         "fullscreen": false,
         "height": 600,
         "resizable": true,
-        "title": "tauri-terminal",
+        "title": "Montor Commander",
         "width": 800
       }
     ],
@@ -33,7 +33,7 @@
     ],
     "targets": "all"
   },
-  "identifier": "com.tauri-terminal.dev",
+  "identifier": "com.montor-commander.dev",
   "plugins": {
     "typegen": {
       "excludePatterns": null,
@@ -48,6 +48,6 @@
       "visualizeDeps": false
     }
   },
-  "productName": "tauri-terminal",
+  "productName": "montor-commander",
   "version": "0.0.0"
 }

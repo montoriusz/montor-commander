@@ -40,7 +40,7 @@ Uses pnpm.
 - Do not edit generated files in `src/generated/`; regenerate them instead.
 - Styling uses Panda CSS (`styled-system/`) and Ark UI primitives — avoid raw CSS unless necessary.
 - Backend is Rust; run `cargo check` in `src-tauri/`.
-- In rust, write async code using `tokio` where it has advantages.
+- In Rust, write async code using `tokio` where it has advantages.
 
 ### AI / `genai`
 

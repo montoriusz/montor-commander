@@ -1,9 +1,11 @@
-{% if let Some(terminal) = terminal -%}
 <terminal>
+{%- if !terminal.is_empty() %}
 {{ terminal }}
+{%- endif %}
 </terminal>
+{% if let Some(commandline) = commandline -%}
+<commandline>{{ commandline }}</commandline>
 {% endif -%}
-<commandline>{{ commandline.unwrap_or("") }}</commandline>
-{% if !msg.is_empty() -%}
-<user_message>{{ msg }}</user_message>
+{% if !message.is_empty() -%}
+<user_message>{{ message }}</user_message>
 {%- endif %}

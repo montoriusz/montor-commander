@@ -114,8 +114,8 @@ async function pull() {
     notify();
 
     const lastMessage = toAppend.at(-1);
-    if (lastMessage?.type === 'Assistant' && lastMessage?.commandline) {
-      commandlineController.put(lastMessage.commandline);
+    if (lastMessage?.type === 'Assistant' && lastMessage?.cmdline) {
+      commandlineController.put(lastMessage.cmdline);
     }
   } catch (e) {
     console.error('chat-store pull failed:', e);
@@ -126,32 +126,25 @@ async function send(msg: string) {
   setState({ isGenerating: true, error: undefined });
   notify();
 
-  const lastMarker = terminalSections.getLastSectionId();
+  const lastSectionId = terminalSections.getLastSectionId();
 
-  const previousMarker = (
+  const previousMarker =
     state.messages.findLast((message) => {
-      return (
-        message.type === 'User' &&
-        message.terminal_marker != null &&
-        message.terminal_marker !== lastMarker
-      );
-    }) as { terminal_marker: string } | undefined
-  )?.terminal_marker;
+      return message.type === 'User' && message.term_sect != null;
+    })?.term_sect ?? undefined;
 
   const sections = terminalSections.getSectionShapshots(previousMarker);
 
   const payload: SendChatMessageParams['payload'] = {
-    terminalMarker: lastMarker,
+    lastExecutedSect: terminalSections.getLastExecutedSectionId(),
+    currentSect: lastSectionId || '',
+    terminal: formatTerminalSections(sections),
+    msg,
   };
-  if (msg) payload.msg = msg;
 
   const lastSection = sections.at(-1);
-  if (lastSection !== undefined && lastSection.id === terminalSections.getLastSectionId()) {
-    payload.commandline = lastSection.command;
-  }
-
-  if (sections.length) {
-    payload.terminal = formatTerminalSections(sections);
+  if (lastSection !== undefined && lastSection.id === lastSectionId) {
+    payload.cmdline = lastSection.command;
   }
 
   try {
@@ -186,6 +179,7 @@ ${section.output ?? ''}
     .trim();
 }
 
+// TODO: dispose previous instance
 void init();
 
 export const chatStore = { getSnapshot, subscribe, send };

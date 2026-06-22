@@ -68,7 +68,7 @@ In `generation.rs`:
 #[serde(rename_all = "camelCase")]
 struct AssistantOutput {
     /// Natural-language reply shown in the chat.
-    msg: String,
+    message: String,
     /// Suggested commandline to replace the user's commandline. Omitted when no suggestion.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     commandline: Option<String>,
@@ -86,7 +86,7 @@ fn response_format() -> ChatResponseFormat {
         serde_json::json!({
             "type": "object",
             "properties": {
-                "msg": {
+                "message": {
                     "type": "string",
                     "description": "Assistant reply to the user."
                 },

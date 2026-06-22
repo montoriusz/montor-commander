@@ -13,6 +13,7 @@ export type CommandlineSuggestionAction = 'execute' | 'put' | 'reject';
 
 export interface CommandlineSuggestionProps extends CommandlineSuggestionVariantProps {
   commandline: string;
+  suggestionId?: string;
   status?: 'pending' | 'accepted' | 'failed' | 'rejected';
   onAction?: (event: CommandlineSuggestionAction) => void;
 }
@@ -20,6 +21,7 @@ export interface CommandlineSuggestionProps extends CommandlineSuggestionVariant
 export function CommandlineSuggestion({
   status,
   commandline,
+  suggestionId,
   onAction,
   ...props
 }: CommandlineSuggestionProps) {
@@ -40,11 +42,15 @@ export function CommandlineSuggestion({
   );
 
   return (
-    <div className={cx(styles.root, statusStyle)}>
-      <Collapsible.Root variant="command" collapsedHeight="2.2em" className={styles.command}>
-        <Collapsible.Content minHeight="0 !important" mb="1" pb="0">
-          {commandline}
-        </Collapsible.Content>
+    <div className={cx(styles.root, statusStyle)} data-suggestion-id={suggestionId}>
+      <Collapsible.Root
+        variant="command"
+        collapsedHeight="2.2em"
+        className={styles.command}
+        open={status === 'pending' || undefined}
+      >
+        {/* TODO: highlight syntax */}
+        <Collapsible.Content>{commandline}</Collapsible.Content>
         <Collapsible.Trigger
           className={css({ position: 'absolute', inset: '0' })}
           // aria-label={open ? 'Collapse' : 'Expand'}

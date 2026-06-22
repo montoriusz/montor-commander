@@ -8,7 +8,6 @@ export const collapsible = defineSlotRecipe({
     content: {
       overflow: 'hidden',
       _open: {
-        // TODO: make fade optional
         animationName: 'expand-height, fade-in',
         animationDuration: 'slow',
       },
@@ -21,6 +20,17 @@ export const collapsible = defineSlotRecipe({
   variants: {
     variant: {
       command: {
+        root: {
+          transitionProperty: 'padding',
+          transitionDuration: 'fast',
+          minHeight: '0',
+          pt: '1',
+          pb: '0',
+          _open: {
+            pt: '2',
+            pb: '2',
+          },
+        },
         content: {
           _open: {
             animationName: 'expand-max-height',

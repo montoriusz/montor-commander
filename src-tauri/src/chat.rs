@@ -4,7 +4,6 @@ use crate::jsonl_store::{JsonlStore, ReadPage};
 use chrono::{Local, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, State};
@@ -14,30 +13,42 @@ use tauri::{AppHandle, Emitter, State};
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all_fields = "camelCase")]
+#[serde(tag = "type")]
 pub enum ChatMessage {
     User {
         #[serde(default, skip_serializing_if = "String::is_empty")]
         id: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        commandline: Option<String>,
-        msg: String,
+
         ts: String,
+
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        terminal: String,
+
+        /// Section of the terminal that was last executed.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        terminal: Option<String>,
+        term_sect: Option<String>,
+
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        terminal_marker: Option<String>,
+        cmdline: Option<String>,
+
+        msg: String,
     },
     Assistant {
         #[serde(default, skip_serializing_if = "String::is_empty")]
         id: String,
 
-        // TODO: allow multiple suggestions
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        commandline: Option<String>,
-        msg: String,
         ts: String,
+
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        cmdline: String,
+
+        msg: String,
+
         model: String,
+
+        /// Target terminal section for the assistant's response.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        term_sect: Option<String>,
     },
 }
 
@@ -71,10 +82,11 @@ pub struct ChatPage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatUserMessagePayload {
-    terminal: Option<String>,
-    terminal_marker: Option<String>,
-    commandline: Option<String>,
-    msg: Option<String>,
+    terminal: String,
+    last_executed_sect: Option<String>,
+    current_sect: String,
+    cmdline: Option<String>,
+    msg: String,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -113,12 +125,8 @@ fn emit_generation_error(app: &AppHandle, message: String) {
 
 pub struct ChatSession {
     pub id: String,
-    store: JsonlStore<ChatMessage>,
-    client: genai::Client,
+    store: Arc<JsonlStore<ChatMessage>>,
     generating: Arc<AtomicBool>,
-    // Saved for reconstructing the store in spawned tasks.
-    store_dir: PathBuf,
-    store_file: String,
 }
 
 impl ChatSession {
@@ -126,23 +134,19 @@ impl ChatSession {
     pub fn new(app_data_dir: &std::path::Path) -> Result<Self, String> {
         let id = Utc::now().format("%Y-%m-%d_%H%M%S").to_string();
 
-        let store_file = format!("chat-{id}.jsonl");
+        let session_dir = &app_data_dir.join(format!("chat-{id}"));
+        std::fs::create_dir_all(&session_dir).map_err(|e| e.to_string())?;
 
-        let store = JsonlStore::new(app_data_dir, &store_file)
-            .map_err(|e| e.to_string())?
-            .with_on_read(|msg: &mut ChatMessage, offset: u32| {
+        let store = JsonlStore::new(&session_dir.join("messages.jsonl")).with_on_read(
+            |msg: &mut ChatMessage, offset: u32| {
                 msg.set_id(offset.to_string());
-            });
-
-        let client = genai::Client::builder().build();
+            },
+        );
 
         Ok(Self {
             id,
-            store,
-            client,
+            store: Arc::new(store),
             generating: Arc::new(AtomicBool::new(false)),
-            store_dir: app_data_dir.to_path_buf(),
-            store_file,
         })
     }
 
@@ -151,11 +155,11 @@ impl ChatSession {
         let ts = now_timestamp();
         let message = ChatMessage::User {
             id: String::new(),
-            msg: payload.msg.unwrap_or_default(),
             ts,
             terminal: payload.terminal,
-            terminal_marker: payload.terminal_marker,
-            commandline: payload.commandline,
+            term_sect: payload.last_executed_sect,
+            msg: payload.msg,
+            cmdline: payload.cmdline,
         };
         let id = self.store.write(message).map_err(|e| e.to_string())?;
         Ok(id.to_string())
@@ -220,6 +224,8 @@ pub async fn send_chat_message(
         return Err("already generating".to_string());
     }
 
+    let current_section = payload.current_sect.clone();
+
     // Append and broadcast the user message.
     let user_id = session.append_user(payload).inspect_err(|_| {
         session.generating.store(false, Ordering::SeqCst);
@@ -229,19 +235,13 @@ pub async fn send_chat_message(
 
     // Capture what the spawned task needs, then release the State borrow.
     let generating = session.generating.clone();
-    let client = session.client.clone();
-    let store_dir = session.store_dir.clone();
-    let store_file = session.store_file.clone();
+    let store = Arc::clone(&session.store);
+    let client = genai::Client::builder().build();
 
     tauri::async_runtime::spawn(async move {
-        // Reconstruct a store handle for reading/writing from this task.
-        let store = JsonlStore::<ChatMessage>::new(&store_dir, &store_file)
-            .expect("failed to reopen chat store")
-            .with_on_read(|_msg: &mut ChatMessage, _offset: u32| {});
-
         let ts = now_timestamp();
 
-        match generation::generate_assistant_reply(&client, &store, &ts).await {
+        match generation::generate_assistant_reply(&client, &store, &ts, &current_section).await {
             Ok(assistant_id) => {
                 emit_messages_changed(&app, assistant_id.to_string());
             }

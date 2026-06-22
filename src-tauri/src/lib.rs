@@ -62,6 +62,8 @@ struct ShellEventPayload {
 
 #[tauri::command]
 async fn create_shell(state: State<'_, TerminalSession>) -> Result<(), String> {
+    // TODO: keep single shell open, send Ctrl+C on re-creation
+
     #[cfg(target_os = "windows")]
     let mut cmd = CommandBuilder::new("powershell.exe");
 

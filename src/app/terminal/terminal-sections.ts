@@ -93,6 +93,12 @@ export class TerminalSections implements ITerminalAddon {
     return sections;
   }
 
+  scrollToSection(sectionId: string) {
+    const section = this.sectionsByAid.get(sectionId);
+    if (!section || !this.terminal) return;
+    this.terminal.scrollToLine(section.markers.PromptStart?.y ?? 0);
+  }
+
   private orderSection(section: Section) {
     const sectionStartY = section.markers?.PromptStart?.y;
     if (sectionStartY === undefined) return;
@@ -244,6 +250,7 @@ function updatePromptDecoration(term: Terminal, section: Section) {
       // element.style.borderTop = `2px solid ${markingBorderColor}`;
       // element.style.transform = `translateY(-1px)`;
       element.style.width = 'calc(100% - 5rem)';
+      element.dataset.sectionId = section.id;
     });
     decoration.onDispose(() => {
       decoration.marker.dispose();

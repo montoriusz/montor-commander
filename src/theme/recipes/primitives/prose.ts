@@ -4,7 +4,6 @@ export const prose = defineRecipe({
   className: 'prose',
   base: {
     lineHeight: '1.45',
-    color: '{colors.fg.muted}',
 
     '& h1, & h2, & h3, & h4, & h5, & h6': {
       color: '{colors.fg.default}',

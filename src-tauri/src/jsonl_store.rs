@@ -121,22 +121,20 @@ pub struct JsonlStore<T> {
 }
 
 impl<T> JsonlStore<T> {
-    /// Create a store that backs onto `<app_data_dir>/<base_name>`.
+    /// Create a store that backs onto given file path.
     ///
-    /// The parent directory is created if it does not already exist.
     /// File handles are kept open for 5 seconds after the last operation
     /// (see [`JsonlStore::with_idle_timeout`]).
-    pub fn new(app_data_dir: &Path, base_name: &str) -> std::io::Result<Self> {
-        std::fs::create_dir_all(app_data_dir)?;
-        Ok(Self {
-            path: app_data_dir.join(base_name),
+    pub fn new(path: &Path) -> Self {
+        Self {
+            path: path.to_path_buf(),
             write_lock: Mutex::new(()),
             handle: Mutex::new(None),
             idle_timeout: DEFAULT_IDLE_TIMEOUT,
             max_file_size: MAX_FILE_SIZE,
             on_read: None,
             _marker: PhantomData,
-        })
+        }
     }
 
     /// Set how long to keep the file handle open after the last operation.
@@ -330,19 +328,33 @@ impl<T: serde::Serialize + serde::de::DeserializeOwned> JsonlStore<T> {
     }
 }
 
+// impl<T> Clone for JsonlStore<T> {
+//     fn clone(&self) -> Self {
+//         JsonlStore::<T> {
+//             path: self.path.clone(),
+//             write_lock: self.write_lock.cl,
+//             handle: self.handle.clone(),
+//             idle_timeout: self.idle_timeout,
+//             max_file_size: self.max_file_size,
+//             on_read: self.on_read.clone(),
+//             _marker: self._marker.clone(),
+//         }
+//     }
+// }
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    fn make_store(dir: &Path, name: &str) -> JsonlStore<serde_json::Value> {
-        JsonlStore::new(dir, name).unwrap()
+    fn make_store(dir: &TempDir, path: &str) -> JsonlStore<serde_json::Value> {
+        JsonlStore::new(&dir.path().join(path))
     }
 
     #[test]
     fn write_returns_byte_offset_as_id() {
         let dir = TempDir::new().unwrap();
-        let store = make_store(dir.path(), "test.jsonl");
+        let store = make_store(&dir, "test.jsonl");
 
         let id0 = store.write(serde_json::json!({ "a": 1 })).unwrap();
         assert_eq!(id0, 0);
@@ -355,9 +367,8 @@ mod tests {
     #[test]
     fn read_returns_messages_with_ids_via_callback() {
         let dir = TempDir::new().unwrap();
-        let store = JsonlStore::new(dir.path(), "test.jsonl")
-            .unwrap()
-            .with_on_read(|msg: &mut serde_json::Value, id: u32| {
+        let store =
+            make_store(&dir, "test.jsonl").with_on_read(|msg: &mut serde_json::Value, id: u32| {
                 msg["id"] = serde_json::json!(id);
             });
 
@@ -377,7 +388,7 @@ mod tests {
     #[test]
     fn read_with_start_id_skips_earlier_messages() {
         let dir = TempDir::new().unwrap();
-        let store = make_store(dir.path(), "test.jsonl");
+        let store = make_store(&dir, "test.jsonl");
 
         store.write(serde_json::json!({ "a": 1 })).unwrap();
         let id1 = store.write(serde_json::json!({ "b": 2 })).unwrap();
@@ -391,7 +402,7 @@ mod tests {
     #[test]
     fn read_with_count_limits_results() {
         let dir = TempDir::new().unwrap();
-        let store = make_store(dir.path(), "test.jsonl");
+        let store = make_store(&dir, "test.jsonl");
 
         store.write(serde_json::json!({ "a": 1 })).unwrap();
         let id1 = store.write(serde_json::json!({ "b": 2 })).unwrap();
@@ -404,7 +415,7 @@ mod tests {
     #[test]
     fn read_from_nonexistent_file_returns_empty() {
         let dir = TempDir::new().unwrap();
-        let store = make_store(dir.path(), "absent.jsonl");
+        let store = make_store(&dir, "test.jsonl");
 
         let page = store.read(0, None).unwrap();
         assert!(page.items.is_empty());
@@ -414,7 +425,7 @@ mod tests {
     #[test]
     fn read_with_invalid_start_id_returns_error() {
         let dir = TempDir::new().unwrap();
-        let store = make_store(dir.path(), "test.jsonl");
+        let store = make_store(&dir, "test.jsonl");
 
         // `{"a":1}\n` is 8 bytes; offset 4 is mid-line.
         store.write(serde_json::json!({ "a": 1 })).unwrap();
@@ -426,7 +437,7 @@ mod tests {
     #[test]
     fn read_with_start_id_past_eof_returns_invalid_id_error() {
         let dir = TempDir::new().unwrap();
-        let store = make_store(dir.path(), "test.jsonl");
+        let store = make_store(&dir, "test.jsonl");
 
         store.write(serde_json::json!({ "a": 1 })).unwrap(); // 8 bytes
 
@@ -437,12 +448,10 @@ mod tests {
 
     #[test]
     fn write_returns_error_when_size_limit_exceeded() {
-        let dir = TempDir::new().unwrap();
         // Set a 32-byte limit so a handful of small writes trips the guard
         // without writing megabytes of test data.
-        let store = JsonlStore::new(dir.path(), "test.jsonl")
-            .unwrap()
-            .with_max_file_size(32);
+        let dir = TempDir::new().unwrap();
+        let store = make_store(&dir, "test.jsonl").with_max_file_size(32);
 
         // Each `{"i":0}\n` is 8 bytes; we should hit the limit within a few
         // iterations and certainly within 100.
@@ -463,7 +472,7 @@ mod tests {
     #[test]
     fn cached_handle_is_reused_across_rapid_operations() {
         let dir = TempDir::new().unwrap();
-        let store = make_store(dir.path(), "test.jsonl");
+        let store = make_store(&dir, "test.jsonl");
 
         // Rapid writes – each should reuse the cached handle.
         let mut ids = Vec::new();
@@ -483,9 +492,7 @@ mod tests {
     #[test]
     fn expired_handle_is_reopened() {
         let dir = TempDir::new().unwrap();
-        let store = JsonlStore::new(dir.path(), "test.jsonl")
-            .unwrap()
-            .with_idle_timeout(Duration::from_millis(50));
+        let store = make_store(&dir, "test.jsonl").with_idle_timeout(Duration::from_millis(50));
 
         let id0 = store.write(serde_json::json!({ "a": 1 })).unwrap();
         assert_eq!(id0, 0);
@@ -506,9 +513,7 @@ mod tests {
     #[test]
     fn evict_expired_handles_closes_stale_fd() {
         let dir = TempDir::new().unwrap();
-        let store = JsonlStore::new(dir.path(), "test.jsonl")
-            .unwrap()
-            .with_idle_timeout(Duration::from_millis(50));
+        let store = make_store(&dir, "test.jsonl").with_idle_timeout(Duration::from_millis(50));
 
         // Open the handle.
         store.write(serde_json::json!({ "a": 1 })).unwrap();

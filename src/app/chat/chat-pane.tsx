@@ -1,12 +1,13 @@
 import { ArrowUp } from 'lucide-react';
 import { useCallback, useState } from 'react';
-import { Box, Flex } from 'styled-system/jsx';
+import { css } from 'styled-system/css';
+import { Box, Flex, VStack } from 'styled-system/jsx';
 import type { ChatMessage } from '@/generated';
 import {
   CommandlineSuggestion,
   type CommandlineSuggestionAction,
 } from '@/ui/composites/commandline-suggestion';
-import { IconButton, Textarea } from '@/ui/primitives';
+import { IconButton, SkeletonText, Spinner, Textarea } from '@/ui/primitives';
 import * as ScrollArea from '@/ui/primitives/scroll-area';
 import { Markdown } from '../shared/markdown';
 import { commandlineController, terminal } from '../terminal';
@@ -22,14 +23,21 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
   const isUser = msg.type === 'User';
   const actionHandler = useCallback(
     (event: CommandlineSuggestionAction) => {
-      if (!msg.commandline) return;
-      onSuggestionAction(event, msg.commandline);
+      if (!msg.cmdline) return;
+      onSuggestionAction(event, msg.cmdline);
     },
-    [msg.commandline, onSuggestionAction],
+    [msg.cmdline, onSuggestionAction],
   );
 
   return (
-    <Flex py="2.5" justifyContent={isUser ? 'flex-end' : 'flex-start'} minW="0" maxW="full">
+    <Flex
+      py="2.5"
+      justifyContent={isUser ? 'flex-end' : 'flex-start'}
+      minW="0"
+      maxW="full"
+      data-msg-type={msg.type}
+      data-term-sect-id={msg.term_sect}
+    >
       {msg.type === 'User' ? (
         <Flex
           maxW="11/12"
@@ -41,16 +49,19 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
           bg="black"
           color="gray.surface.fg"
           gap="2"
+          data-terminal-section-id={msg.term_sect}
+          data-message-type={msg.type}
         >
           <Markdown content={msg.msg} />
         </Flex>
       ) : (
         <Flex w="11/12" flexDirection="column" gap="2">
           <Markdown content={msg.msg} />
-          {!isUser && msg.commandline && (
+          {!isUser && msg.cmdline && (
             <CommandlineSuggestion
               status={isCurrentSection ? 'pending' : undefined}
-              commandline={msg.commandline}
+              suggestionId={msg.id}
+              commandline={msg.cmdline}
               onAction={actionHandler}
             />
           )}
@@ -78,7 +89,7 @@ export function ChatPane() {
     }
   }
 
-  const lastUserCommandline = messages.findLast((msg) => msg.type === 'User')?.commandline ?? '';
+  const lastUserCommandline = messages.findLast((msg) => msg.type === 'User')?.cmdline ?? '';
 
   const suggestionActionHandler = useCallback(
     (event: CommandlineSuggestionAction, command: string) => {
@@ -125,9 +136,12 @@ export function ChatPane() {
               ),
             )}
             {isGenerating && (
-              <Box my="3" color="fg.muted">
-                Thinking…
-              </Box>
+              <VStack gap="2" my="3" alignItems="start">
+                <div className={css({ color: 'fg.muted' })}>
+                  <Spinner mr="2" size="xs" /> Thinking…
+                </div>
+                <SkeletonText />
+              </VStack>
             )}
           </ScrollArea.Viewport>
         </ScrollArea.Root>

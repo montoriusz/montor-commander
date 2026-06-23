@@ -13,7 +13,7 @@ export const commandlineSuggestion = defineSlotRecipe({
       height: 'auto',
       minWidth: 'max(10rem, 30%)',
       width: 'max-content',
-      maxWidth: '100%',
+      maxWidth: 'full',
     },
     command: {
       position: 'relative',

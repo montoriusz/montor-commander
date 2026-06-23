@@ -83,8 +83,7 @@ pub struct ChatPage {
 #[serde(rename_all = "camelCase")]
 pub struct ChatUserMessagePayload {
     terminal: String,
-    last_executed_sect: Option<String>,
-    current_sect: String,
+    current_sect: Option<String>,
     cmdline: Option<String>,
     msg: String,
 }
@@ -157,7 +156,7 @@ impl ChatSession {
             id: String::new(),
             ts,
             terminal: payload.terminal,
-            term_sect: payload.last_executed_sect,
+            term_sect: payload.current_sect,
             msg: payload.msg,
             cmdline: payload.cmdline,
         };
@@ -241,7 +240,7 @@ pub async fn send_chat_message(
     tauri::async_runtime::spawn(async move {
         let ts = now_timestamp();
 
-        match generation::generate_assistant_reply(&client, &store, &ts, &current_section).await {
+        match generation::generate_assistant_reply(&client, &store, &ts, current_section).await {
             Ok(assistant_id) => {
                 emit_messages_changed(&app, assistant_id.to_string());
             }

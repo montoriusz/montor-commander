@@ -146,7 +146,7 @@ pub(crate) async fn generate_assistant_reply(
     client: &genai::Client,
     store: &JsonlStore<ChatMessage>,
     now_ts: &str,
-    terminal_section: &str,
+    terminal_section: Option<String>,
 ) -> Result<u32, String> {
     let req = build_history(store)?;
 
@@ -185,7 +185,7 @@ pub(crate) async fn generate_assistant_reply(
         cmdline: parsed.commandline,
         msg: parsed.message,
         ts: now_ts.to_string(),
-        term_sect: Some(terminal_section.to_string()),
+        term_sect: terminal_section,
         model: MODEL.to_string(),
     };
 

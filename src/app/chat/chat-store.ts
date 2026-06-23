@@ -8,6 +8,7 @@ import {
   type SendChatMessageParams,
   sendChatMessage,
 } from '@/generated';
+import { debounce } from '../shared/debounce';
 import { commandlineController, terminalSections } from '../terminal';
 import type { SectionSnapshot } from '../terminal/terminal-sections';
 
@@ -65,14 +66,8 @@ async function init() {
     });
 
     // Register event listeners.
-    let pullTimer: ReturnType<typeof setTimeout> | undefined;
-    onChatMessagesChanged((_payload) => {
-      if (pullTimer != null) clearTimeout(pullTimer);
-      pullTimer = setTimeout(() => {
-        pullTimer = undefined;
-        void pull();
-      }, PULL_DEBOUNCE_MS);
-    });
+    const debouncedPull = debounce(() => void pull(), PULL_DEBOUNCE_MS);
+    onChatMessagesChanged(() => debouncedPull());
 
     onChatGenerationError((payload) => {
       setState({
@@ -88,13 +83,8 @@ async function init() {
 
 async function pull() {
   try {
-    console.log('pulling chat messages', { cursor: state.cursor });
     const page: ChatPage = await readChatMessages({
       afterCursor: state.cursor,
-    });
-    console.log('pulled chat messages', {
-      nextCursor: page.nextCursor,
-      count: page.messages.length,
     });
 
     if (page.messages.length === 0) return;
@@ -136,8 +126,7 @@ async function send(msg: string) {
   const sections = terminalSections.getSectionShapshots(previousMarker);
 
   const payload: SendChatMessageParams['payload'] = {
-    lastExecutedSect: terminalSections.getLastExecutedSectionId(),
-    currentSect: lastSectionId || '',
+    currentSect: lastSectionId,
     terminal: formatTerminalSections(sections),
     msg,
   };
@@ -162,14 +151,9 @@ function formatTerminalSections(sections: SectionSnapshot[]): string {
     .reduce((acc, section) => {
       const isSectionExecuted = section.output !== undefined;
       return `${acc}
-<prompt>
-${section.prompt}
-</prompt>${
+<prompt>${section.prompt}</prompt>${
         isSectionExecuted
-          ? `
-<command>
-${section.command ?? ''}
-</command>
+          ? `<command>${section.command ?? ''}</command>
 <output>
 ${section.output ?? ''}
 </output>`

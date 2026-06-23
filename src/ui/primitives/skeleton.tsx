@@ -27,7 +27,7 @@ export const SkeletonText = forwardRef<HTMLDivElement, SkeletonTextProps>(
           <Skeleton
             key={index}
             height="4"
-            _last={{ maxW: noOfLines === 1 ? '[100%]' : '[80%]' }}
+            _last={{ maxW: noOfLines === 1 ? 'full' : '[80%]' }}
             {...skeletonProps}
           />
         ))}

@@ -1,7 +1,8 @@
 import { ArrowUp } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { css } from 'styled-system/css';
 import { Box, Flex, VStack } from 'styled-system/jsx';
+import { sectionConnector } from 'styled-system/recipes';
 import type { ChatMessage } from '@/generated';
 import {
   CommandlineSuggestion,
@@ -9,6 +10,7 @@ import {
 } from '@/ui/composites/commandline-suggestion';
 import { IconButton, SkeletonText, Spinner, Textarea } from '@/ui/primitives';
 import * as ScrollArea from '@/ui/primitives/scroll-area';
+import { useEmitUpdateMatching } from '../section-matching';
 import { Markdown } from '../shared/markdown';
 import { commandlineController, terminal } from '../terminal';
 import { useChat } from './use-chat';
@@ -18,6 +20,8 @@ interface MessageBubbleProps {
   isCurrentSection: boolean;
   onSuggestionAction: (event: CommandlineSuggestionAction, commandline: string) => void;
 }
+
+const RESIZE_DEBOUNCE_TIME = 300;
 
 function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBubbleProps) {
   const isUser = msg.type === 'User';
@@ -30,14 +34,7 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
   );
 
   return (
-    <Flex
-      py="2.5"
-      justifyContent={isUser ? 'flex-end' : 'flex-start'}
-      minW="0"
-      maxW="full"
-      data-msg-type={msg.type}
-      data-term-sect-id={msg.term_sect}
-    >
+    <Flex my="2" justifyContent={isUser ? 'flex-end' : 'flex-start'} minW="0" maxW="full">
       {msg.type === 'User' ? (
         <Flex
           maxW="11/12"
@@ -49,8 +46,6 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
           bg="black"
           color="gray.surface.fg"
           gap="2"
-          data-terminal-section-id={msg.term_sect}
-          data-message-type={msg.type}
         >
           <Markdown content={msg.msg} />
         </Flex>
@@ -71,7 +66,12 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
   );
 }
 
+// TODO: add form element
+// TODO: allow sending empty messages if terminal output is present
+
 export function ChatPane() {
+  const emitUpdateMatchingRef = useRef<() => void>(null);
+  emitUpdateMatchingRef.current = useEmitUpdateMatching();
   const { messages, isGenerating, error, send } = useChat();
   const [input, setInput] = useState('');
 
@@ -82,12 +82,15 @@ export function ChatPane() {
     void send(text);
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  }
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    },
+    [handleSubmit],
+  );
 
   const lastUserCommandline = messages.findLast((msg) => msg.type === 'User')?.cmdline ?? '';
 
@@ -107,6 +110,13 @@ export function ChatPane() {
     [lastUserCommandline],
   );
 
+  const sectionsStarted = new Set<string>();
+  const isSectionStart = (sectId: string | null) => {
+    if (sectId == null || sectionsStarted.has(sectId)) return false;
+    sectionsStarted.add(sectId);
+    return true;
+  };
+
   return (
     <Flex flexDirection="column" h="full" pr="0.5" flexGrow="1" overflow="hidden">
       <Box
@@ -122,17 +132,25 @@ export function ChatPane() {
 
       <Flex flexDirection="column" bg="gray.2" flex="1" borderRadius="l3" overflow="hidden">
         <ScrollArea.Root flex="1" size="lg">
-          <ScrollArea.Viewport py="1" pr="3" pl="4">
+          <ScrollArea.Viewport py="1" pr="3" pl="4" onScroll={handleScroll}>
             {messages.map(
               (
                 msg, // TODO: subscribe to PTY events to know current section id
               ) => (
-                <MessageBubble
-                  key={msg.id}
-                  msg={msg}
-                  onSuggestionAction={suggestionActionHandler}
-                  isCurrentSection={false}
-                />
+                <Fragment key={msg.id}>
+                  {isSectionStart(msg.term_sect) && (
+                    <Box
+                      className={sectionConnector({ separator: true })}
+                      data-term-sect-id={msg.term_sect}
+                    />
+                  )}
+                  <MessageBubble
+                    key={msg.id}
+                    msg={msg}
+                    onSuggestionAction={suggestionActionHandler}
+                    isCurrentSection={false}
+                  />
+                </Fragment>
               ),
             )}
             {isGenerating && (

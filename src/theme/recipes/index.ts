@@ -1,4 +1,6 @@
 import { commandlineSuggestion } from './composites/commandline-suggestion';
+import { sectionConnector } from './composites/section-connector';
+
 import { absoluteCenter } from './primitives/absolute-center';
 import { accordion } from './primitives/accordion';
 import { alert } from './primitives/alert';
@@ -117,4 +119,5 @@ export const recipes = {
 };
 export const slotRecipes = {
   commandlineSuggestion,
+  sectionConnector,
 };

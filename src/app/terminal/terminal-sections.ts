@@ -61,17 +61,17 @@ export class TerminalSections implements ITerminalAddon {
 
   getLastExecutedSectionId(): string | undefined {
     const sectionIdx = this.sections.findLastIndex(
-      (section) => section.markers.CommandStarted !== undefined,
+      (section) => section.markers.CommandStarted != null,
     );
-    return sectionIdx !== -1 ? this.sections[sectionIdx - 1]?.id : undefined;
+    return sectionIdx !== -1 ? this.sections[sectionIdx]?.id : undefined;
   }
 
-  getSectionShapshots(afterAid: string | undefined): SectionSnapshot[] {
+  getSectionShapshots(startAid: string | undefined): SectionSnapshot[] {
     if (!this.terminal) return [];
 
-    const prevSection = afterAid !== undefined ? this.sectionsByAid.get(afterAid) : undefined;
+    const section = startAid !== undefined ? this.sectionsByAid.get(startAid) : undefined;
+    const startIdx = section !== undefined ? this.sections.indexOf(section) : 0;
 
-    const startIdx = prevSection !== undefined ? this.sections.indexOf(prevSection) + 1 : 0;
     const sections = this.sections
       .slice(startIdx)
       .values()
@@ -210,7 +210,6 @@ export function parseOsc133(data: string): {
   return { marker, exitCode, aid };
 }
 
-// const markingBorderColor = token('colors.green.surface.border');
 const markingBgColor = '#121b17';
 const markingRulerColor = '#20573e';
 
@@ -246,11 +245,9 @@ function updatePromptDecoration(term: Terminal, section: Section) {
   if (decoration) {
     section.decoration = decoration;
     decoration.onRender((element: HTMLElement) => {
-      // TODO: move to recipe ?
-      // element.style.borderTop = `2px solid ${markingBorderColor}`;
-      // element.style.transform = `translateY(-1px)`;
+      // TODO: move to recipe
       element.style.width = 'calc(100% - 5rem)';
-      element.dataset.sectionId = section.id;
+      element.dataset.sectId = section.id;
     });
     decoration.onDispose(() => {
       decoration.marker.dispose();

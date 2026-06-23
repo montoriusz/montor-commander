@@ -1,7 +1,9 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Box } from 'styled-system/jsx';
 
 import '@xterm/xterm/css/xterm.css';
+import { useEmitUpdateMatching } from '../section-matching/use-emit-update-matching';
+import { useDebouncedCallback } from '../shared/use-debounced-callback';
 import { fitTerminal, terminal } from './terminal';
 
 export interface TerminalHandle {
@@ -10,29 +12,30 @@ export interface TerminalHandle {
 
 export const TerminalPane = forwardRef<TerminalHandle>(function TerminalPane(_, handleRef) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const fitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emitUpdateMatching = useEmitUpdateMatching();
 
-  const scheduleFit = useCallback(() => {
-    if (fitTimerRef.current != null) clearTimeout(fitTimerRef.current);
-    fitTimerRef.current = setTimeout(fitTerminal, 100);
-  }, []);
+  const scheduleFit = useDebouncedCallback(fitTerminal, 100);
 
   useImperativeHandle(handleRef, () => ({ fit: scheduleFit }), [scheduleFit]);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || terminal.element === container) return;
 
     terminal.open(container);
+
+    const scrollHandler = terminal.onRender(() => {
+      emitUpdateMatching();
+    });
 
     fitTerminal();
     window.addEventListener('resize', scheduleFit);
 
     return () => {
       window.removeEventListener('resize', scheduleFit);
-      if (fitTimerRef.current != null) clearTimeout(fitTimerRef.current);
+      scrollHandler.dispose();
     };
-  }, [scheduleFit]);
+  }, [scheduleFit, emitUpdateMatching]);
 
   return (
     <Box

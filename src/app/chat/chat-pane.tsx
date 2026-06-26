@@ -8,7 +8,7 @@ import {
   CommandlineSuggestion,
   type CommandlineSuggestionAction,
 } from '@/ui/composites/commandline-suggestion';
-import { IconButton, SkeletonText, Spinner, Textarea } from '@/ui/primitives';
+import { IconButton, RelativeTime, SkeletonText, Spinner, Textarea } from '@/ui/primitives';
 import * as ScrollArea from '@/ui/primitives/scroll-area';
 import { useEmitUpdateMatching } from '../section-matching';
 import { Markdown } from '../shared/markdown';
@@ -34,12 +34,12 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
   );
 
   return (
-    <Flex my="2" justifyContent={isUser ? 'flex-end' : 'flex-start'} minW="0" maxW="full">
+    <Flex my="2" direction="column" alignItems={isUser ? 'end' : 'start'} minW="0" maxW="full">
       {msg.type === 'User' ? (
         <Flex
           maxW="11/12"
           px="3r"
-          py="0.5r"
+          mb="1"
           borderRadius="l3"
           borderWidth="1"
           borderColor="gray.8"
@@ -62,6 +62,7 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
           )}
         </Flex>
       )}
+      <RelativeTime value={msg.ts} />
     </Flex>
   );
 }
@@ -75,12 +76,67 @@ export function ChatPane() {
   const { messages, isGenerating, error, send } = useChat();
   const [input, setInput] = useState('');
 
-  function handleSubmit() {
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  // Last measured distance from the bottom, used by the ResizeObserver to keep
+  // the user's scroll position stable when content reflows.
+  const distanceFromBottomRef = useRef(0);
+
+  // Preserve the distance from the bottom across viewport/content size changes
+  // (e.g. markdown/images reflowing, window resize). Pinned-to-bottom stays
+  // stuck to the bottom; any other position keeps the same offset.
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+
+    let isResizing = false;
+    let isResizingTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const onScroll = () => {
+      if (isResizing) return;
+      emitUpdateMatchingRef.current?.();
+      distanceFromBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight;
+    };
+
+    let observer: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => {
+        if (isResizingTimeout) clearTimeout(isResizingTimeout);
+        isResizing = true;
+        isResizingTimeout = setTimeout(() => {
+          isResizing = false;
+          isResizingTimeout = null;
+        }, RESIZE_DEBOUNCE_TIME);
+        el.scrollTop = Math.max(
+          0,
+          el.scrollHeight - el.clientHeight - distanceFromBottomRef.current,
+        );
+      });
+      observer.observe(el);
+    }
+
+    el.addEventListener('scroll', onScroll);
+
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      observer?.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Fake `isGenerating` usage
+    isGenerating;
+    if (messages.length === 0) return;
+    const el = viewportRef.current;
+    if (!el || distanceFromBottomRef.current > 20) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, isGenerating]);
+
+  const handleSubmit = useCallback(() => {
     const text = input.trim();
     if (!text || isGenerating) return;
     setInput('');
     void send(text);
-  }
+  }, [input, isGenerating, send]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -132,7 +188,7 @@ export function ChatPane() {
 
       <Flex flexDirection="column" bg="gray.2" flex="1" borderRadius="l3" overflow="hidden">
         <ScrollArea.Root flex="1" size="lg">
-          <ScrollArea.Viewport py="1" pr="3" pl="4" onScroll={handleScroll}>
+          <ScrollArea.Viewport ref={viewportRef} py="1" pr="3" pl="4">
             {messages.map(
               (
                 msg, // TODO: subscribe to PTY events to know current section id

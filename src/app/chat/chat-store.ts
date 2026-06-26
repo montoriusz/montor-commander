@@ -147,6 +147,7 @@ async function send(msg: string) {
 
 function formatTerminalSections(sections: SectionSnapshot[]): string {
   // TODO: check for truncated sections (no prompt start marker)
+  // TODO: add timestamp to output
   return sections
     .reduce((acc, section) => {
       const isSectionExecuted = section.output !== undefined;

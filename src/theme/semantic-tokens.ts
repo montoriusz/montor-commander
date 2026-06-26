@@ -56,6 +56,7 @@ export const semanticTokens = {
 
     sectionConnector: {
       value: {
+        _light: '{colors.gray.a5}',
         _dark: '{colors.gray.a5}',
       },
     },

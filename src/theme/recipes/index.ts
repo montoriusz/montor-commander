@@ -42,6 +42,7 @@ import { prose } from './primitives/prose';
 import { radioCardGroup } from './primitives/radio-card-group';
 import { radioGroup } from './primitives/radio-group';
 import { ratingGroup } from './primitives/rating-group';
+import { relativeTime } from './primitives/relative-time';
 import { scrollArea } from './primitives/scroll-area';
 import { segmentGroup } from './primitives/segment-group';
 import { select } from './primitives/select';
@@ -59,6 +60,7 @@ import { toast } from './primitives/toast';
 import { toggleGroup } from './primitives/toggle-group';
 import { tooltip } from './primitives/tooltip';
 export const recipes = {
+  // Primitives
   button,
   group,
   absoluteCenter,
@@ -96,6 +98,7 @@ export const recipes = {
   pagination,
   pinInput,
   popover,
+  relativeTime,
   progress,
   prose,
   radioCardGroup,
@@ -116,8 +119,10 @@ export const recipes = {
   toast,
   toggleGroup,
   tooltip,
+
+  // Composites
+  sectionConnector,
 };
 export const slotRecipes = {
   commandlineSuggestion,
-  sectionConnector,
 };

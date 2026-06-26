@@ -1,7 +1,7 @@
 'use client';
 
 import { Play, Terminal, X } from 'lucide-react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { css, cx } from 'styled-system/css';
 import {
   type CommandlineSuggestionVariantProps,
@@ -18,6 +18,8 @@ export interface CommandlineSuggestionProps extends CommandlineSuggestionVariant
   onAction?: (event: CommandlineSuggestionAction) => void;
 }
 
+const COLLAPSED_HEIGHT = '2.4em';
+
 export function CommandlineSuggestion({
   status,
   commandline,
@@ -25,7 +27,35 @@ export function CommandlineSuggestion({
   onAction,
   ...props
 }: CommandlineSuggestionProps) {
-  const styles = commandlineSuggestion(props);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(status === 'pending');
+  const [hasMore, setHasMore] = useState(false);
+
+  useEffect(() => {
+    if (status === 'pending') setOpen(true);
+  }, [status]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const content = contentRef.current;
+    if (!root || !content) return;
+    const measure = () => {
+      // The collapsible root clips to `collapsedHeight` when collapsed, so when
+      // it is shorter than the full content there is hidden content below.
+      setHasMore(content.scrollHeight > root.clientHeight + 1);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(content);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, []);
+
+  const styles = commandlineSuggestion({
+    ...props,
+    hasMore: !open && hasMore,
+  });
   let statusStyle = css({ colorPalette: 'blue' });
   if (status === 'pending') statusStyle = css({ colorPalette: 'amber' });
   else if (status === 'accepted') statusStyle = css({ colorPalette: 'green' });
@@ -44,14 +74,17 @@ export function CommandlineSuggestion({
   return (
     <div className={cx(styles.root, statusStyle)} data-suggestion-id={suggestionId}>
       <Collapsible.Root
+        ref={rootRef}
         variant="command"
-        collapsedHeight="2.2em"
+        collapsedHeight={COLLAPSED_HEIGHT}
         className={styles.command}
-        open={status === 'pending' || undefined}
+        open={open}
+        onOpenChange={(details) => setOpen(details.open)}
       >
         {/* TODO: highlight syntax */}
-        <Collapsible.Content>{commandline}</Collapsible.Content>
+        <Collapsible.Content ref={contentRef}>{commandline}</Collapsible.Content>
         <Collapsible.Trigger
+          disabled={!open && !hasMore}
           className={css({ position: 'absolute', inset: '0' })}
           // aria-label={open ? 'Collapse' : 'Expand'}
         />

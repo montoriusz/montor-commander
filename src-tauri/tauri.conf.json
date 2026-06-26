@@ -2,7 +2,11 @@
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/config.schema.json",
   "app": {
     "security": {
-      "csp": "default-src 'self'"
+      "csp": {
+        "default-src": "self tauri://localhost",
+        "connect-src": "ipc://localhost",
+        "style-src": "self tauri://localhost 'unsafe-inline'"
+      }
     },
     "windows": [
       {
@@ -31,7 +35,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "targets": "all"
+    "targets": "appimage",
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
   },
   "identifier": "com.montor-commander.dev",
   "plugins": {
@@ -49,5 +58,5 @@
     }
   },
   "productName": "montor-commander",
-  "version": "0.0.0"
+  "version": "0.0.1"
 }

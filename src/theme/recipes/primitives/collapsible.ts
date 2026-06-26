@@ -24,8 +24,9 @@ export const collapsible = defineSlotRecipe({
           transitionProperty: 'padding',
           transitionDuration: 'fast',
           minHeight: '0',
-          pt: '1',
+          pt: '0.5',
           pb: '0',
+          position: 'relative',
           _open: {
             pt: '2',
             pb: '2',

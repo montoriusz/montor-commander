@@ -14,6 +14,18 @@ export const commandlineSuggestion = defineSlotRecipe({
       minWidth: 'max(10rem, 30%)',
       width: 'max-content',
       maxWidth: 'full',
+      position: 'relative',
+      _after: {
+        content: '""',
+        display: 'block',
+        position: 'absolute',
+        bottom: '0',
+        left: '0',
+        right: '0',
+        zIndex: '1',
+        pointerEvents: 'none',
+        //'--status-base-color': '{colors.black.a7}', // {colors.colorPalette.surface.border}',
+      },
     },
     command: {
       position: 'relative',
@@ -27,16 +39,13 @@ export const commandlineSuggestion = defineSlotRecipe({
       lineHeight: '1.2',
     },
     actions: {
+      zIndex: '100',
       p: '1',
       display: 'flex',
       alignItems: 'center',
       gap: '1',
       flexShrink: 0,
     },
-  },
-  defaultVariants: {
-    variant: 'surface',
-    size: 'md',
   },
   variants: {
     variant: {
@@ -80,5 +89,30 @@ export const commandlineSuggestion = defineSlotRecipe({
       lg: { command: { textStyle: 'lg', px: '2.5', pt: '2.5' } },
       xl: { command: { textStyle: 'xl', px: '3', pt: '3' } },
     },
+    hasMore: {
+      true: {
+        root: {
+          _after: {
+            height: '10px',
+            // Solid fill masked by two intersecting linear gradients so the
+            // fade tapers along both the top and the right edge (rectangular
+            // corner fade) instead of only fading upward.
+            // backgroundColor: 'var(--status-base-color)',
+            backgroundColor: '{colors.black.a7}',
+            maskImage:
+              'linear-gradient(to top, black, transparent), linear-gradient(to right, black, transparent)',
+            maskComposite: 'intersect',
+            WebkitMaskImage:
+              'linear-gradient(to top, black, transparent), linear-gradient(to right, black, black 70%, transparent 80%)',
+            WebkitMaskComposite: 'source-in',
+          },
+        },
+      },
+    },
+  },
+  staticCss: ['*'],
+  defaultVariants: {
+    variant: 'surface',
+    size: 'md',
   },
 });

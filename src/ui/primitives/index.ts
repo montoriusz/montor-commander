@@ -43,6 +43,7 @@ export * as Progress from './progress';
 export * as RadioCardGroup from './radio-card-group';
 export * as RadioGroup from './radio-group';
 export * as RatingGroup from './rating-group';
+export { RelativeTime, type RelativeTimeProps } from './relative-time';
 export * as ScrollArea from './scroll-area';
 export * as SegmentGroup from './segment-group';
 export * as Select from './select';

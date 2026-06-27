@@ -155,9 +155,7 @@ function formatTerminalSections(sections: SectionSnapshot[]): string {
 <prompt>${section.prompt}</prompt>${
         isSectionExecuted
           ? `<command>${section.command ?? ''}</command>
-<output>
-${section.output ?? ''}
-</output>`
+          <output>\n${section.output ? `${section.output}\n` : ''}</output>`
           : ''
       }`;
     }, '')

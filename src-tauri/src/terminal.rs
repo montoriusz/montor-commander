@@ -1,0 +1,267 @@
+//! Terminal PTY session, commands, and reader thread.
+//!
+//! All terminal-related Tauri state, commands, and the PTY reader thread live
+//! here. Output and shell-integration markers are streamed to the frontend over a
+//! single ordered [`tauri::ipc::Channel`] as [`TerminalEvent`]s, replacing the
+//! previous pair of `emit`/`listen` event channels (`pty-output` and the four
+//! shell-integration events). Sharing one stream preserves send order between raw
+//! output and context markers, eliminating the race between the old two events.
+
+use crate::osc133::{Segment, ShellEvent};
+use portable_pty::{CommandBuilder, PtyPair, PtySize, native_pty_system};
+use std::{
+    io::{Read, Write},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+};
+use tauri::{State, async_runtime::Mutex as AsyncMutex, ipc::Channel};
+
+/// Bash integration script embedded at compile time.
+static BASH_INTEGRATION: &str = include_str!("../assets/bash-integration.sh");
+
+/// A single ordered stream of terminal events sent to the frontend over one
+/// `tauri::ipc::Channel`.
+///
+/// `Output` carries raw PTY bytes (lossily decoded as UTF-8, matching the previous
+/// `pty-output` behaviour); the remaining variants carry the non-positional
+/// shell-integration context previously emitted as the four `prompt-*` /
+/// `command-*` events. Positional decoration placement still relies on xterm.js'
+/// own OSC-133 parser hook (which sees the same bytes via `Output`), because xterm
+/// parses writes asynchronously and buffer coordinates are only known after a
+/// write is processed — channel markers must not be used for buffer coordinates.
+#[derive(Clone, serde::Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum TerminalEvent {
+    Output {
+        data: String,
+    },
+    PromptStarted {
+        aid: Option<String>,
+    },
+    PromptEnded {
+        aid: Option<String>,
+    },
+    CommandStarted {
+        aid: Option<String>,
+    },
+    CommandFinished {
+        exit_code: Option<i32>,
+        aid: Option<String>,
+    },
+}
+
+/// Translate an `osc133::ShellEvent` into the frontend-facing [`TerminalEvent`].
+fn map_shell_event(event: ShellEvent) -> TerminalEvent {
+    match event {
+        ShellEvent::PromptStarted { aid } => TerminalEvent::PromptStarted { aid },
+        ShellEvent::PromptEnded { aid } => TerminalEvent::PromptEnded { aid },
+        ShellEvent::CommandStarted { aid } => TerminalEvent::CommandStarted { aid },
+        ShellEvent::CommandFinished { exit_code, aid } => {
+            TerminalEvent::CommandFinished { exit_code, aid }
+        }
+    }
+}
+
+/// Shared, swappable sink for `TerminalEvent`s.
+///
+/// The reader thread reads from this slot, while `create_shell` writes the
+/// currently active frontend-facing `Channel` into it. Using a shared slot
+/// instead of moving a `Channel` into the long-lived reader thread is what makes
+/// the design HMR-safe: on a dev reload the frontend passes a fresh `Channel`,
+/// and `create_shell` simply re-points the slot — the reader keeps reading the
+/// active channel. A `std::sync::Mutex` (not a tokio mutex) is used because the
+/// reader is a std thread and the critical section is a non-blocking `channel.send`.
+pub type EventSlot = Arc<Mutex<Option<Channel<TerminalEvent>>>>;
+
+/// Process-wide terminal state. One shell and one reader are spawned lazily by
+/// `create_shell` and reused for the lifetime of the backend process; the only
+/// thing that changes across dev HMR reloads is the `event_channel` slot.
+pub struct TerminalSession {
+    pub pty_pair: Arc<AsyncMutex<PtyPair>>,
+    pub writer: Arc<AsyncMutex<Box<dyn Write + Send>>>,
+    /// The currently active frontend-facing sink. `create_shell` overwrites this
+    /// on every call (including HMR re-invocations).
+    pub event_channel: EventSlot,
+    /// Reader held in state until the first `create_shell` call spawns the reader
+    /// thread that consumes it.
+    pub reader: Arc<Mutex<Option<Box<dyn Read + Send>>>>,
+    /// Guards so the reader thread is only spawned once across HMR reloads.
+    pub reader_started: Arc<AtomicBool>,
+    /// Guards so the shell process is only spawned once across HMR reloads.
+    pub shell_started: Arc<AtomicBool>,
+}
+
+#[tauri::command]
+pub async fn create_shell(
+    on_event: Channel<TerminalEvent>,
+    state: State<'_, TerminalSession>,
+) -> Result<(), String> {
+    // 1. Re-point the slot to the freshly-provided channel. This is the only step
+    //    that runs on an HMR re-invocation, so repeated `create_shell` calls are
+    //    safe: one shell, one reader, the sink simply moves.
+    *state.event_channel.lock().unwrap() = Some(on_event);
+
+    // 2. Spawn the reader thread once.
+    if !state.reader_started.swap(true, Ordering::SeqCst) {
+        let reader = state
+            .reader
+            .lock()
+            .unwrap()
+            .take()
+            .ok_or_else(|| "pty reader already taken".to_string())?;
+        spawn_reader_thread(state.event_channel.clone(), reader);
+    }
+
+    // 3. Spawn the shell into the PTY slave once.
+    if !state.shell_started.swap(true, Ordering::SeqCst) {
+        #[cfg(target_os = "windows")]
+        let mut cmd = CommandBuilder::new("powershell.exe");
+
+        #[cfg(not(target_os = "windows"))]
+        let mut cmd = {
+            // Write the bash integration script to a temp file.
+            let rcfile_path = std::env::temp_dir().join("montorcmd_bash.sh");
+            std::fs::write(&rcfile_path, BASH_INTEGRATION).map_err(|e| e.to_string())?;
+
+            let mut c = CommandBuilder::new("bash");
+            c.arg("--rcfile");
+            c.arg(rcfile_path);
+            c.arg("-i");
+            c
+        };
+
+        #[cfg(target_os = "windows")]
+        cmd.env("TERM", "cygwin");
+
+        #[cfg(not(target_os = "windows"))]
+        cmd.env("TERM", "xterm-256color");
+
+        let mut child = state
+            .pty_pair
+            .lock()
+            .await
+            .slave
+            .spawn_command(cmd)
+            .map_err(|e| e.to_string())?;
+
+        // Block on child exit in the tokio blocking pool rather than a raw
+        // std thread — same OS thread, but folded into the runtime for
+        // consistency with the rest of the codebase.
+        tauri::async_runtime::spawn_blocking(move || {
+            let _ = child.wait();
+        });
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn write_to_pty(data: &str, state: State<'_, TerminalSession>) -> Result<(), ()> {
+    write!(state.writer.lock().await, "{}", data).map_err(|_| ())
+}
+
+#[tauri::command]
+pub async fn resize_pty(rows: u16, cols: u16, state: State<'_, TerminalSession>) -> Result<(), ()> {
+    state
+        .pty_pair
+        .lock()
+        .await
+        .master
+        .resize(PtySize {
+            rows,
+            cols,
+            ..Default::default()
+        })
+        .map_err(|_| ())
+}
+
+/// Spawn the PTY reader thread.
+///
+/// The thread owns a clone of the shared [`EventSlot`] (not a `Channel`): per
+/// chunk it briefly locks the slot and, if a channel is present, `send`s. The
+/// lock is only held around the `send`, never across `reader.read`, so an HMR
+/// re-registration cannot be blocked by a blocking read.
+fn spawn_reader_thread(slot: EventSlot, reader: Box<dyn Read + Send>) {
+    // For one PTY, a blocking thread is simple and avoids occupying a tokio
+    // blocking-pool slot with a permanently-blocked task.
+    thread::spawn(move || {
+        let mut reader = reader;
+        let mut buf = [0u8; 4096];
+        let mut carry: Vec<u8> = Vec::new();
+
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    let chunk = &buf[..n];
+                    // Split the chunk at OSC 133 boundaries and stream the
+                    // ordered segments over the channel. Each segment's bytes
+                    // are forwarded as `Output` so xterm.js' own OSC-133 parser
+                    // hook can place positional decorations from buffer
+                    // coordinates; each recognised sequence additionally
+                    // produces its shell-integration context event. Splitting
+                    // serially preserves send order between raw output and
+                    // context markers within a chunk — the context event for a
+                    // marker arrives immediately before that marker's bytes.
+                    crate::osc133::scan(&mut carry, chunk, |segment| {
+                        let guard = slot.lock().unwrap();
+                        let Some(ch) = guard.as_ref() else {
+                            return;
+                        };
+                        match segment {
+                            Segment::Passthrough(bytes) => {
+                                let _ = ch.send(TerminalEvent::Output {
+                                    data: String::from_utf8_lossy(&bytes).into_owned(),
+                                });
+                            }
+                            Segment::Sequence { bytes, event } => {
+                                let _ = ch.send(map_shell_event(event));
+                                let _ = ch.send(TerminalEvent::Output {
+                                    data: String::from_utf8_lossy(&bytes).into_owned(),
+                                });
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    });
+}
+
+/// Open the PTY pair and build the single [`TerminalSession`] backing the app.
+///
+/// The reader is stashed in state rather than spawned here: the reader thread is
+/// spawned lazily by `create_shell` on first invocation, so dev HMR can re-point
+/// the channel (and the shell can be spawned) through the idempotent command.
+pub fn build_session() -> TerminalSession {
+    let pty_system = native_pty_system();
+    let pty_pair = pty_system
+        .openpty(PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .expect("failed to open pty");
+
+    let reader = pty_pair
+        .master
+        .try_clone_reader()
+        .expect("failed to clone pty reader");
+    let writer = pty_pair
+        .master
+        .take_writer()
+        .expect("failed to take pty writer");
+
+    TerminalSession {
+        pty_pair: Arc::new(AsyncMutex::new(pty_pair)),
+        writer: Arc::new(AsyncMutex::new(writer)),
+        event_channel: Arc::new(Mutex::new(None)),
+        reader: Arc::new(Mutex::new(Some(reader))),
+        reader_started: Arc::new(AtomicBool::new(false)),
+        shell_started: Arc::new(AtomicBool::new(false)),
+    }
+}

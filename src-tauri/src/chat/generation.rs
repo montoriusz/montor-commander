@@ -267,7 +267,7 @@ mod tests {
         };
         let json = serde_json::to_string(&output).unwrap();
         // Both fields are always rendered; empty is the "nothing here" sentinel.
-        assert!(json.contains("\"msg\":"));
+        assert!(json.contains("\"message\":"));
         assert!(json.contains("\"commandline\":\"\""));
         let parsed: AssistantOutput = serde_json::from_str(&json).unwrap();
         assert!(parsed.commandline.is_empty());

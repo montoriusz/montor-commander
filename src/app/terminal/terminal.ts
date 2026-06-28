@@ -50,7 +50,7 @@ function getCache(): TerminalCache {
   if (!cache.initialized) {
     cache.initialized = true;
     const terminal = new Terminal({
-      fontFamily: 'JetBrains Mono',
+      fontFamily: token('fonts.code'),
       theme: {
         background: token('colors.canvas'),
         green: '#33b074',

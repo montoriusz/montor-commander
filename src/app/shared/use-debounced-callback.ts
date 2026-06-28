@@ -6,14 +6,9 @@ export function useDebouncedCallback<Args extends unknown[]>(
   delayMs: number,
 ): DebouncedFn<Args> {
   const fnRef = useRef(fn);
-  useEffect(() => {
-    fnRef.current = fn;
-  });
+  fnRef.current = fn;
 
-  const debounced = useMemo(
-    () => debounce<Args>((...args) => fnRef.current(...args), delayMs),
-    [delayMs],
-  );
+  const debounced = useMemo(() => debounce<Args>(fnRef.current, delayMs), [delayMs]);
 
   useEffect(() => debounced.cancel, [debounced]);
 

@@ -44,6 +44,7 @@ export class TerminalSections implements ITerminalAddon {
         this.registerMarkingPoint('CommandStarted', aid);
       } else if (marker === 'D') {
         this.registerMarkingPoint('CommandFinished', aid);
+        console.log('CommandFinished', aid);
       }
       return true;
     };
@@ -72,23 +73,20 @@ export class TerminalSections implements ITerminalAddon {
     const section = startAid !== undefined ? this.sectionsByAid.get(startAid) : undefined;
     const startIdx = section !== undefined ? this.sections.indexOf(section) : 0;
 
-    const sections = this.sections
-      .slice(startIdx)
-      .values()
-      .filter((section) => section.markers.PromptStart !== undefined)
-      .map<SectionSnapshot>((section) => {
-        return {
-          id: section.id,
-          prompt: this.readFragment(section.markers.PromptStart!, section.markers.PromptEnd),
-          command: section.markers.PromptEnd
-            ? this.readFragment(section.markers.PromptEnd, section.markers.CommandStarted)
-            : undefined,
-          output: section.markers.CommandStarted
-            ? this.readFragment(section.markers.CommandStarted, section.markers.CommandFinished)
-            : undefined,
-        };
-      })
-      .toArray();
+    const sections = [];
+    for (const section of this.sections.slice(startIdx)) {
+      if (section.markers.PromptStart === undefined) continue;
+      sections.push({
+        id: section.id,
+        prompt: this.readFragment(section.markers.PromptStart!, section.markers.PromptEnd),
+        command: section.markers.PromptEnd
+          ? this.readFragment(section.markers.PromptEnd, section.markers.CommandStarted)
+          : undefined,
+        output: section.markers.CommandStarted
+          ? this.readFragment(section.markers.CommandStarted, section.markers.CommandFinished)
+          : undefined,
+      });
+    }
 
     return sections;
   }

@@ -17,11 +17,11 @@
   },
   "dependencies": {
     "@ark-ui/react": "^5.37.2",
-    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/api": "^2.11.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "date-fns": "^4.4.0",
-    "lucide-react": "^1.17.0",
+    "lucide-react": "^1.21.0",
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
     "react-node": "^1.0.2",
@@ -31,15 +31,15 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
     "@pandacss/dev": "^1.11.3",
-    "@tauri-apps/cli": "^2.0.0",
-    "@types/node": "^25.9.1",
+    "@tauri-apps/cli": "^2.11.3",
+    "@types/node": "^25.9.4",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/react-syntax-highlighter": "^15.5.13",
-    "@vitejs/plugin-react": "^6.0.2",
-    "prettier": "^3.8.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "prettier": "^3.8.5",
     "react": "^19.2.7",
     "typescript": "^6.0.3",
-    "vite": "^8.0.16"
+    "vite": "^8.1.0"
   }
 }

@@ -4,7 +4,14 @@
 // see the documentation: https://zed.dev/docs/configuring-zed#settings-files
 {
   "format_on_save": "on",
-  "language_servers": ["prettier", "biome", "!eslint", "!tailwindcss", "..."],
+  "language_servers": [
+    "prettier",
+    "biome",
+    "!eslint",
+    "!tailwindcss-language-server",
+    "!typescript-language-server",
+    "...",
+  ],
   "languages": {
     "JavaScript": {
       "formatter": "prettier",

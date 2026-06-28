@@ -5,6 +5,6 @@ export const fonts = defineSemanticTokens.fonts({
     value: 'Inter, ui-sans-serif, system-ui, sans-serif',
   },
   code: {
-    value: '"JetBrains Mono", ui-monospace, monospace',
+    value: 'Iosevka, "JetBrains Mono", ui-monospace, monospace',
   },
 });

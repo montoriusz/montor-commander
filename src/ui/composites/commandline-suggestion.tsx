@@ -92,6 +92,7 @@ export function CommandlineSuggestion({
       </Collapsible.Root>
       <div className={styles.actions}>
         <IconButton
+          title="Execute"
           colorPalette={status === 'pending' ? 'green' : undefined}
           variant="subtle"
           size="xs"
@@ -100,11 +101,17 @@ export function CommandlineSuggestion({
           <Play />
         </IconButton>
         {status === 'pending' ? (
-          <IconButton colorPalette={'red'} variant="subtle" size="xs" onClick={handlers.onReject}>
+          <IconButton
+            title="Reject"
+            colorPalette={'red'}
+            variant="subtle"
+            size="xs"
+            onClick={handlers.onReject}
+          >
             <X />
           </IconButton>
         ) : (
-          <IconButton variant="subtle" size="xs" onClick={handlers.onPut}>
+          <IconButton title="Send to terminal" variant="subtle" size="xs" onClick={handlers.onPut}>
             <Terminal />
           </IconButton>
         )}

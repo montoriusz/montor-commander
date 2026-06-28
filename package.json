@@ -18,6 +18,7 @@
   "dependencies": {
     "@ark-ui/react": "^5.37.2",
     "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-opener": "~2.5.4",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "date-fns": "^4.4.0",

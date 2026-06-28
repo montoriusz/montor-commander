@@ -35,6 +35,7 @@ pub fn run() {
     let terminal_session = terminal::build_session();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Create chat session. The terminal reader is spawned lazily by
             // `create_shell`, so dev HMR can re-point the channel without

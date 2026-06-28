@@ -8,10 +8,10 @@ import {
   CommandlineSuggestion,
   type CommandlineSuggestionAction,
 } from '@/ui/composites/commandline-suggestion';
+import { Markdown } from '@/ui/composites/markdown';
 import { IconButton, RelativeTime, SkeletonText, Spinner, Textarea } from '@/ui/primitives';
 import * as ScrollArea from '@/ui/primitives/scroll-area';
 import { useEmitUpdateMatching } from '../section-matching';
-import { Markdown } from '../shared/markdown';
 import { commandlineController, terminal } from '../terminal';
 import { useChat } from './use-chat';
 
@@ -62,7 +62,10 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
           )}
         </Flex>
       )}
-      <RelativeTime value={msg.ts} />
+      <Box color="fg.muted" fontSize="xs">
+        <RelativeTime value={msg.ts} />
+        {msg.type === 'Assistant' ? <>&ensp;&bull;&ensp;{msg.model}</> : null}
+      </Box>
     </Flex>
   );
 }

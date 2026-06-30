@@ -30,7 +30,10 @@ const components: Components = {
       </Code>
     );
   },
-  // Customize other elements (h1, p, a, etc.)
+  a(props) {
+    return <a target="_blank" rel="noopener noreferrer" {...props} />;
+  },
+  // Customize other elements (h1, p, etc.)
 };
 
 const remarkPlugins = [remarkGfm];

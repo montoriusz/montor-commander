@@ -33,7 +33,7 @@ Uses pnpm.
 
 ## Conventions
 
-- Save Implementation plans in `src/implementation-plans`.
+- Save Implementation plans in `implementation-plans/`.
 - Frontend is TypeScript + React; keep `tsc` passing.
 - xterm.js for used as a terminal emulator.
 - There is an assistant chat next to the terminal.

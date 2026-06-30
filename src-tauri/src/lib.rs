@@ -1,6 +1,7 @@
 pub mod chat;
 mod jsonl_store;
 mod osc133;
+mod recorder;
 mod terminal;
 
 use chat::ChatSession;

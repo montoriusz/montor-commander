@@ -12,9 +12,16 @@ the following blocks:
 - `<terminal>...</terminal>` — Optional. The terminal activity since the
   previous user turn. Inside it is a stream of these tags, in order:
   - `<prompt>...</prompt>` — a Bash prompt that was displayed.
-  - `<command>...</command>` — a command the user executed.
-  - `<output>...</output>` — a snapshot of the terminal output produced by the
-    preceding command.
+  - `<command executed="...">...</command>` — a command line at the preceding
+    prompt. The `executed` attribute is `"true"` when the shell actually started
+    the command and `"false"` when the line was captured
+    before execution (e.g. the user submitted a turn while still typing).
+  - `<output finished="..." exit-code="...">...</output>` — a snapshot of the
+    terminal output produced by the preceding command. The `finished` attribute
+    is `"true"` when the shell reported an exit code (carried in the
+    `exit-code` attribute) and `"false"` when no exit code was captured (e.g.
+    the command was terminated by a signal); in the latter case the
+    `exit-code` attribute is omitted.
     These tags may repeat and interleave to reflect the real sequence of events.
     Use this only as context about what the user has been doing.
 

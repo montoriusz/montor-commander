@@ -67,6 +67,7 @@ export class TerminalSections implements ITerminalAddon {
     return sectionIdx !== -1 ? this.sections[sectionIdx]?.id : undefined;
   }
 
+  /** @deprecated */
   getSectionShapshots(startAid: string | undefined): SectionSnapshot[] {
     if (!this.terminal) return [];
 
@@ -149,6 +150,7 @@ export class TerminalSections implements ITerminalAddon {
     updateSectionDecorations(this.terminal, section);
   }
 
+  /** @deprecated */
   private readFragment(start: BufferMarker, end?: BufferMarker): string {
     const buffer = this.terminal!.buffer.normal;
     const endY = end?.y ?? buffer.length - 1;
@@ -224,11 +226,11 @@ function updatePromptDecoration(term: Terminal, section: Section) {
   }
 
   // Check if markers are available
-  if (!section.markers.PromptStart) return;
+  if (!section.markers.CommandFinished) return;
 
   const activeBuffer = term.buffer.active;
 
-  const y = section.markers.PromptStart.y;
+  const y = section.markers.CommandFinished.y;
   const marker = term.registerMarker(y - activeBuffer.cursorY - activeBuffer.baseY);
   if (!marker) return;
 

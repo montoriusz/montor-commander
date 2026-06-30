@@ -7,7 +7,10 @@
 //! shell-integration events). Sharing one stream preserves send order between raw
 //! output and context markers, eliminating the race between the old two events.
 
+use crate::chat::ChatSession;
+use crate::jsonl_store::JsonlStore;
 use crate::osc133::{Segment, ShellEvent};
+use crate::recorder::{LiveSectionKey, SessionRecorder, persist_section};
 use portable_pty::{CommandBuilder, PtyPair, PtySize, native_pty_system};
 use std::{
     io::{Read, Write},
@@ -17,7 +20,7 @@ use std::{
     },
     thread,
 };
-use tauri::{State, async_runtime::Mutex as AsyncMutex, ipc::Channel};
+use tauri::{AppHandle, State, async_runtime::Mutex as AsyncMutex, ipc::Channel};
 
 /// Bash integration script embedded at compile time.
 static BASH_INTEGRATION: &str = include_str!("../assets/bash-integration.sh");
@@ -92,12 +95,23 @@ pub struct TerminalSession {
     pub reader_started: Arc<AtomicBool>,
     /// Guards so the shell process is only spawned once across HMR reloads.
     pub shell_started: Arc<AtomicBool>,
+    /// Records finished sections (parsed + raw) for re-render and LLM context.
+    /// Fed by the reader thread; read at send time for the live `<commandline>`.
+    pub recorder: Arc<Mutex<SessionRecorder>>,
+    /// Key of the most recently persisted *live* snapshot, so repeated sends
+    /// that leave the live section unchanged are not re-persisted. Only touched
+    /// by the live path in `send_chat_message`; the reader-thread (finished)
+    /// path ignores it. Separate from `recorder`'s lock so the parse + write can
+    /// happen outside the recorder lock.
+    pub last_live_key: Arc<Mutex<Option<LiveSectionKey>>>,
 }
 
 #[tauri::command]
 pub async fn create_shell(
     on_event: Channel<TerminalEvent>,
+    app: AppHandle,
     state: State<'_, TerminalSession>,
+    chat: State<'_, ChatSession>,
 ) -> Result<(), String> {
     // 1. Re-point the slot to the freshly-provided channel. This is the only step
     //    that runs on an HMR re-invocation, so repeated `create_shell` calls are
@@ -112,7 +126,13 @@ pub async fn create_shell(
             .unwrap()
             .take()
             .ok_or_else(|| "pty reader already taken".to_string())?;
-        spawn_reader_thread(state.event_channel.clone(), reader);
+        spawn_reader_thread(
+            state.event_channel.clone(),
+            reader,
+            state.recorder.clone(),
+            chat.store(),
+            app,
+        );
     }
 
     // 3. Spawn the shell into the PTY slave once.
@@ -175,7 +195,9 @@ pub async fn resize_pty(rows: u16, cols: u16, state: State<'_, TerminalSession>)
             cols,
             ..Default::default()
         })
-        .map_err(|_| ())
+        .map_err(|_| ())?;
+    state.recorder.lock().unwrap().set_size(rows, cols);
+    Ok(())
 }
 
 /// Spawn the PTY reader thread.
@@ -184,7 +206,13 @@ pub async fn resize_pty(rows: u16, cols: u16, state: State<'_, TerminalSession>)
 /// chunk it briefly locks the slot and, if a channel is present, `send`s. The
 /// lock is only held around the `send`, never across `reader.read`, so an HMR
 /// re-registration cannot be blocked by a blocking read.
-fn spawn_reader_thread(slot: EventSlot, reader: Box<dyn Read + Send>) {
+fn spawn_reader_thread(
+    slot: EventSlot,
+    reader: Box<dyn Read + Send>,
+    recorder: Arc<Mutex<SessionRecorder>>,
+    store: Arc<JsonlStore<crate::chat::ChatMessage>>,
+    app: AppHandle,
+) {
     // For one PTY, a blocking thread is simple and avoids occupying a tokio
     // blocking-pool slot with a permanently-blocked task.
     thread::spawn(move || {
@@ -207,21 +235,38 @@ fn spawn_reader_thread(slot: EventSlot, reader: Box<dyn Read + Send>) {
                     // context markers within a chunk — the context event for a
                     // marker arrives immediately before that marker's bytes.
                     crate::osc133::scan(&mut carry, chunk, |segment| {
-                        let guard = slot.lock().unwrap();
-                        let Some(ch) = guard.as_ref() else {
-                            return;
-                        };
-                        match segment {
-                            Segment::Passthrough(bytes) => {
-                                let _ = ch.send(TerminalEvent::Output {
-                                    data: String::from_utf8_lossy(&bytes).into_owned(),
-                                });
+                        // 1. Forward to the live terminal (existing behaviour).
+                        {
+                            let guard = slot.lock().unwrap();
+                            if let Some(ch) = guard.as_ref() {
+                                match &segment {
+                                    Segment::Passthrough(bytes) => {
+                                        let _ = ch.send(TerminalEvent::Output {
+                                            data: String::from_utf8_lossy(bytes).into_owned(),
+                                        });
+                                    }
+                                    Segment::Sequence { bytes, event } => {
+                                        let _ = ch.send(map_shell_event(event.clone()));
+                                        let _ = ch.send(TerminalEvent::Output {
+                                            data: String::from_utf8_lossy(bytes).into_owned(),
+                                        });
+                                    }
+                                }
                             }
-                            Segment::Sequence { bytes, event } => {
-                                let _ = ch.send(map_shell_event(event));
-                                let _ = ch.send(TerminalEvent::Output {
-                                    data: String::from_utf8_lossy(&bytes).into_owned(),
-                                });
+                        }
+
+                        // 2. Feed the recorder. When a CommandFinished closes
+                        //    the active section, parse + persist it as a
+                        //    `TerminalSection` chat message outside the recorder
+                        //    lock so the section can be parsed without holding it.
+                        let finished = recorder.lock().unwrap().feed(&segment);
+                        if let Some(section) = finished {
+                            if let Err(e) = persist_section(&section, &store, &app, false) {
+                                tracing::warn!(
+                                    error = %e,
+                                    aid = %section.aid,
+                                    "failed to persist terminal section"
+                                );
                             }
                         }
                     });
@@ -263,5 +308,7 @@ pub fn build_session() -> TerminalSession {
         reader: Arc::new(Mutex::new(Some(reader))),
         reader_started: Arc::new(AtomicBool::new(false)),
         shell_started: Arc::new(AtomicBool::new(false)),
+        recorder: Arc::new(Mutex::new(SessionRecorder::new(80, 24))),
+        last_live_key: Arc::new(Mutex::new(None)),
     }
 }

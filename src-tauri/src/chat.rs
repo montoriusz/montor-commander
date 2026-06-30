@@ -1,6 +1,7 @@
 mod generation;
 
 use crate::jsonl_store::{JsonlStore, ReadPage};
+use crate::terminal::TerminalSession;
 use chrono::{Local, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -21,16 +22,6 @@ pub enum ChatMessage {
 
         ts: String,
 
-        #[serde(default, skip_serializing_if = "String::is_empty")]
-        terminal: String,
-
-        /// Section of the terminal that was last executed.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        term_sect: Option<String>,
-
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        cmdline: Option<String>,
-
         msg: String,
     },
     Assistant {
@@ -45,17 +36,46 @@ pub enum ChatMessage {
         msg: String,
 
         model: String,
+    },
+    /// A finished terminal section, persisted by the PTY reader thread as soon
+    /// as the command finishes (OSC 133 D). Carries the raw section bytes (for
+    /// re-render into a separate xterm) and the vt100-parsed prompt/command/
+    /// output text (for LLM context, replayed by `build_history`).
+    TerminalSection {
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        id: String,
 
-        /// Target terminal section for the assistant's response.
+        ts: String,
+
+        aid: String,
+
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        term_sect: Option<String>,
+        exit_code: Option<i32>,
+
+        /// Whether the command was started (OSC 133 C fired) before finishing.
+        executed: bool, // TODO: verify
+
+        cols: u16,
+        rows: u16,
+
+        /// Raw section bytes (lossy UTF-8), replayable via xterm `write`.
+        raw: String,
+
+        #[serde(default)]
+        prompt: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        cmdline: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        output: String,
     },
 }
 
 impl ChatMessage {
     fn set_id(&mut self, id: String) {
         match self {
-            ChatMessage::User { id: field, .. } | ChatMessage::Assistant { id: field, .. } => {
+            ChatMessage::User { id: field, .. }
+            | ChatMessage::Assistant { id: field, .. }
+            | ChatMessage::TerminalSection { id: field, .. } => {
                 *field = id;
             }
         }
@@ -77,15 +97,6 @@ pub struct ChatSessionInfo {
 pub struct ChatPage {
     pub messages: Vec<ChatMessage>,
     pub next_cursor: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatUserMessagePayload {
-    terminal: String,
-    current_sect: Option<String>,
-    cmdline: Option<String>,
-    msg: String,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -149,16 +160,19 @@ impl ChatSession {
         })
     }
 
+    /// Share the underlying store with the PTY reader thread, which appends
+    /// `TerminalSection` messages as commands finish.
+    pub fn store(&self) -> Arc<JsonlStore<ChatMessage>> {
+        Arc::clone(&self.store)
+    }
+
     /// Append a user message and return its byte-offset ID.
-    pub fn append_user(&self, payload: ChatUserMessagePayload) -> Result<String, String> {
+    pub fn append_user(&self, msg: String) -> Result<String, String> {
         let ts = now_timestamp();
         let message = ChatMessage::User {
             id: String::new(),
             ts,
-            terminal: payload.terminal,
-            term_sect: payload.current_sect,
-            msg: payload.msg,
-            cmdline: payload.cmdline,
+            msg,
         };
         let id = self.store.write(message).map_err(|e| e.to_string())?;
         Ok(id.to_string())
@@ -210,8 +224,9 @@ pub fn read_chat_messages(
 
 #[tauri::command]
 pub async fn send_chat_message(
-    payload: ChatUserMessagePayload,
+    msg: String,
     app: AppHandle,
+    terminal: State<'_, TerminalSession>,
     session: State<'_, ChatSession>,
 ) -> Result<(), String> {
     // Reject if already generating.
@@ -223,10 +238,66 @@ pub async fn send_chat_message(
         return Err("already generating".to_string());
     }
 
-    let current_section = payload.current_sect.clone();
+    // Snapshot the section the user is currently typing into (or, while a
+    // long-running command is in progress, the section that is producing that
+    // output). We hold the recorder only long enough to clone the in-flight
+    // `SessionSection`; the (somewhat expensive) parse + JSONL write happen
+    // outside the lock. Only sections whose prompt has finished rendering
+    // (OSC 133 B) are worth persisting — an A-only section has no usable
+    // prompt/command yet and would just produce an empty record.
+    let live_section = {
+        let recorder = terminal.recorder.lock().unwrap();
+        recorder.current_snapshot().and_then(|section| {
+            // Stop borrowing the recorder before parsing/serialising.
+            if section.off_prompt_end.is_some() {
+                Some(section.clone())
+            } else {
+                None
+            }
+        })
+    };
+
+    let store = Arc::clone(&session.store);
+
+    // Persist the live snapshot as an `TerminalSection` BEFORE the user message
+    // — `build_history` accumulates preceding `TerminalSection` records into the
+    // next user turn's `<terminal>` block, so the assistant sees the prompt, the
+    // commandline the user was typing, and any partial output a running command
+    // has emitted so far. `executed` is whatever the recorder observed (the
+    // command may already be running — OSC 133 C has fired); only the exit code
+    // is forced to `None`, since no `D` has fired yet. The section is *kept* in the
+    // recorder: the reader thread will persist it again as a completed
+    // `TerminalSection` when OSC 133 D fires
+    //
+    // Dedup: skip the write when the live section has not changed since the
+    // previously persisted live snapshot (same `aid`, `cmdline`, `output`).
+    // See `recorder::persist_live_section_if_changed` for the rationale.
+    if let Some(section) = live_section.as_ref() {
+        match crate::recorder::persist_live_section_if_changed(
+            section,
+            &terminal.last_live_key,
+            &store,
+            &app,
+        ) {
+            Ok(true) => {}
+            Ok(false) => {
+                tracing::debug!(
+                    aid = %section.aid,
+                    "live terminal section empty or unchanged; skipping persist"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    aid = %section.aid,
+                    "failed to persist live terminal section"
+                );
+            }
+        }
+    };
 
     // Append and broadcast the user message.
-    let user_id = session.append_user(payload).inspect_err(|_| {
+    let user_id = session.append_user(msg).inspect_err(|_| {
         session.generating.store(false, Ordering::SeqCst);
     })?;
 
@@ -234,13 +305,12 @@ pub async fn send_chat_message(
 
     // Capture what the spawned task needs, then release the State borrow.
     let generating = session.generating.clone();
-    let store = Arc::clone(&session.store);
     let client = genai::Client::builder().build();
 
     tauri::async_runtime::spawn(async move {
         let ts = now_timestamp();
 
-        match generation::generate_assistant_reply(&client, &store, &ts, current_section).await {
+        match generation::generate_assistant_reply(&client, &store, &ts).await {
             Ok(assistant_id) => {
                 emit_messages_changed(&app, assistant_id.to_string());
             }

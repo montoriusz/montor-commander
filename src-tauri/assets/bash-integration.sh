@@ -1,6 +1,14 @@
 # Source the user's normal interactive config first
 if [ -f ~/.bashrc ]; then . ~/.bashrc; fi
 
+# Add -F to ls alias to enable LLM-visible type indicators
+if [ "$(type -t ls)" = "alias" ]; then
+  body=${BASH_ALIASES[ls]}          # raw alias body, no parsing
+  alias ls="$body -F"
+elif [ "$(type -t ls)" != "function" ]; then
+  alias ls='ls -F'
+fi
+
 __osc133_aid_counter=0
 __osc133_prompt_start() { printf '\033]133;A;aid=%s-%s\007' "$$" "$__osc133_aid_counter"; }
 __osc133_prompt_end()   { printf '\033]133;B;aid=%s-%s\007' "$$" "$__osc133_aid_counter"; }

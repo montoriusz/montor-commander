@@ -1,6 +1,12 @@
 # Source the user's normal interactive config first
 if [ -f ~/.zshrc ]; then . ~/.zshrc; fi
 
+if [[ ${+aliases[ls]} == 1 ]]; then
+  alias ls="${aliases[ls]} -F"
+elif [[ $(whence -w ls) != *function ]]; then
+  alias ls='ls -F'
+fi
+
 __osc133_aid_counter=0
 __osc133_prompt_start() { printf '\033]133;A;aid=%s-%s\007' "$$" "$__osc133_aid_counter"; }
 __osc133_prompt_end()   { printf '\033]133;B;aid=%s-%s\007' "$$" "$__osc133_aid_counter"; }

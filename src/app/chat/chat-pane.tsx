@@ -25,13 +25,20 @@ const RESIZE_DEBOUNCE_TIME = 300;
 
 function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBubbleProps) {
   const isUser = msg.type === 'User';
+  // `cmdline` exists only on User/Assistant; null for TerminalSection so the
+  // suggestion action is a no-op for those (which render nothing anyway).
+  const cmdline = msg.type === 'TerminalSection' ? null : msg.cmdline;
   const actionHandler = useCallback(
     (event: CommandlineSuggestionAction) => {
-      if (!msg.cmdline) return;
-      onSuggestionAction(event, msg.cmdline);
+      if (!cmdline) return;
+      onSuggestionAction(event, cmdline);
     },
-    [msg.cmdline, onSuggestionAction],
+    [cmdline, onSuggestionAction],
   );
+
+  // TerminalSection messages carry buffer content for re-render into a separate
+  // xterm (Phase 3); they are not chat bubbles and render nothing here.
+  if (msg.type === 'TerminalSection') return null;
 
   return (
     <Flex my="2" direction="column" alignItems={isUser ? 'end' : 'start'} minW="0" maxW="full">
@@ -169,11 +176,20 @@ export function ChatPane() {
     [lastUserCommandline],
   );
 
-  const sectionsStarted = new Set<string>();
-  const isSectionStart = (sectId: string | null) => {
-    if (sectId == null || sectionsStarted.has(sectId)) return false;
-    sectionsStarted.add(sectId);
-    return true;
+  let lastTerminalStartSectionId: string | null = null;
+  let lastTerminalEndSectionId: string | null = null;
+  const getTerminalSectionBounds = (message: ChatMessage) => {
+    if (message.type === 'TerminalSection') {
+      if (lastTerminalStartSectionId === null) {
+        lastTerminalStartSectionId = message.aid;
+      }
+      lastTerminalEndSectionId = message.aid;
+      return undefined;
+    } else if (lastTerminalStartSectionId !== null) {
+      const result = [lastTerminalStartSectionId, lastTerminalEndSectionId];
+      [lastTerminalStartSectionId, lastTerminalEndSectionId] = [null, null];
+      return result;
+    }
   };
 
   return (
@@ -192,15 +208,14 @@ export function ChatPane() {
       <Flex flexDirection="column" bg="gray.2" flex="1" borderRadius="l3" overflow="hidden">
         <ScrollArea.Root flex="1" size="lg">
           <ScrollArea.Viewport ref={viewportRef} py="1" pr="3" pl="4">
-            {messages.map(
-              (
-                msg, // TODO: subscribe to PTY events to know current section id
-              ) => (
+            {messages.map((msg) => {
+              const sectionBoundary = getTerminalSectionBounds(msg);
+              return (
                 <Fragment key={msg.id}>
-                  {isSectionStart(msg.term_sect) && (
+                  {sectionBoundary && (
                     <Box
                       className={sectionConnector({ separator: true })}
-                      data-term-sect-id={msg.term_sect}
+                      data-term-sect-id={sectionBoundary[1]}
                     />
                   )}
                   <MessageBubble
@@ -210,8 +225,8 @@ export function ChatPane() {
                     isCurrentSection={false}
                   />
                 </Fragment>
-              ),
-            )}
+              );
+            })}
             {isGenerating && (
               <VStack gap="2" my="3" alignItems="start">
                 <div className={css({ color: 'fg.muted' })}>

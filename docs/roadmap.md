@@ -3,7 +3,7 @@
 ## Features
 
 - Terminal-chat view modes: Balloons, Split-view, Notebook.
-- UI options — colors and fonts (scope TBD: theme presets vs. full custom theming).
+- UI options — colors and fonts (scope TBD: theme presets vs. full custom theming, automatic system colors theme).
 - Command-line guard — context-independent, security-focused review of LLM-suggested and user-entered commands:
   - On demand or always on (Guardian mode).
   - Potential loss rating indicator.
@@ -12,6 +12,7 @@
 - Silent filesystem traversal, file reading, and other safe read-only tools (keeping terminal space for critical operations only).
 - Switch between different LLM models and providers
 - User-friendly command output representation (Markdown/HTML)
+- Utilize OSC 3008 for terminal session metadata.
 - LLM-generated forms for user input
 - Session management:
   - Switch, edit (remove unwanted turns), or suspend chat sessions within the same terminal session.
@@ -23,4 +24,8 @@
 - Acting as a full shell or replacing the user's terminal emulator.
 - IDE features (file editing, syntax highlighting, debugging).
 - Automatic agent mode.
+
+## Known Issues
+
+- Processes don't exit cleanly
 -

@@ -5,12 +5,10 @@ import {
   onChatGenerationError,
   onChatMessagesChanged,
   readChatMessages,
-  type SendChatMessageParams,
   sendChatMessage,
 } from '@/generated';
 import { debounce } from '../shared/debounce';
-import { commandlineController, terminalSections } from '../terminal';
-import type { SectionSnapshot } from '../terminal/terminal-sections';
+import { commandlineController } from '../terminal';
 
 interface ChatState {
   messages: ChatMessage[];
@@ -116,50 +114,13 @@ async function send(msg: string) {
   setState({ isGenerating: true, error: undefined });
   notify();
 
-  const lastSectionId = terminalSections.getLastSectionId();
-
-  const previousMarker =
-    state.messages.findLast((message) => {
-      return message.type === 'User' && message.term_sect != null;
-    })?.term_sect ?? undefined;
-
-  const sections = terminalSections.getSectionShapshots(previousMarker);
-
-  const payload: SendChatMessageParams['payload'] = {
-    currentSect: lastSectionId,
-    terminal: formatTerminalSections(sections),
-    msg,
-  };
-
-  const lastSection = sections.at(-1);
-  if (lastSection !== undefined && lastSection.id === lastSectionId) {
-    payload.cmdline = lastSection.command;
-  }
-
   try {
-    await sendChatMessage({ payload });
+    await sendChatMessage({ msg });
     // New messages arrive via the pull triggered by the BE event.
   } catch (e) {
     setState({ error: String(e), isGenerating: false });
     notify();
   }
-}
-
-function formatTerminalSections(sections: SectionSnapshot[]): string {
-  // TODO: check for truncated sections (no prompt start marker)
-  // TODO: add timestamp to output
-  return sections
-    .reduce((acc, section) => {
-      const isSectionExecuted = section.output !== undefined;
-      return `${acc}
-<prompt>${section.prompt}</prompt>${
-        isSectionExecuted
-          ? `<command>${section.command ?? ''}</command>
-          <output>\n${section.output ? `${section.output}\n` : ''}</output>`
-          : ''
-      }`;
-    }, '')
-    .trim();
 }
 
 // TODO: dispose previous instance

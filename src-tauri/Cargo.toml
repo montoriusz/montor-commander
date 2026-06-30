@@ -29,6 +29,7 @@ askama = "0.16.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tauri-plugin-opener = "2"
+vt100 = "0.16"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

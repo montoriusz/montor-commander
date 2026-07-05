@@ -37,9 +37,19 @@ pub(crate) struct AssistantOutput {
 // Askama templates
 // ---------------------------------------------------------------------------
 
+/// The chat system prompt template.
+///
+/// The single `sysinfo` field carries the output of the per-shell
+/// `*-sysinfo.sh` probe (run by [`crate::shell::Shell::sysinfo`] and cached on
+/// the [`crate::shell::Shell`] owned by `ChatSession`) so the model can tailor
+/// its command suggestions to the user's host and available tools. The probe's
+/// `key: value` schema is identical across shells, so the template does not
+/// branch on shell kind.
 #[derive(Template)]
 #[template(path = "system_prompt.md")]
-struct SystemPromptTemplate;
+struct SystemPromptTemplate<'a> {
+    sysinfo: &'a str,
+}
 
 #[derive(Template)]
 #[template(path = "user_turn.md")]
@@ -64,7 +74,7 @@ fn response_format() -> ChatResponseFormat {
                 },
                 "commandline": {
                     "type": "string",
-                    "description": "Suggested bash commandline to replace the user's current commandline. Use an empty string when there is no command to suggest."
+                    "description": "Suggested shell commandline to replace the user's current commandline. Use an empty string when there is no command to suggest."
                 }
             },
             "required": ["message", "commandline"],
@@ -89,8 +99,8 @@ fn response_format() -> ChatResponseFormat {
 /// Assistant turns are replayed as the same JSON shape used for structured
 /// output (`{ "msg": …, "commandline": … }`) to keep history consistent
 /// with the output contract.
-fn build_history(store: &JsonlStore<ChatMessage>) -> Result<ChatRequest, String> {
-    let system = SystemPromptTemplate
+fn build_history(store: &JsonlStore<ChatMessage>, sysinfo: &str) -> Result<ChatRequest, String> {
+    let system = SystemPromptTemplate { sysinfo }
         .render()
         .map_err(|e| format!("failed to render system prompt: {e}"))?;
     let mut req = ChatRequest::new(vec![]).with_system(system);
@@ -209,8 +219,9 @@ pub(crate) async fn generate_assistant_reply(
     client: &genai::Client,
     store: &JsonlStore<ChatMessage>,
     now_ts: &str,
+    sysinfo: &str,
 ) -> Result<u32, String> {
-    let req = build_history(store)?;
+    let req = build_history(store, sysinfo)?;
 
     // Log the serialized `ChatRequest` (system prompt + all formatted turns) at
     // debug level. `ChatRequest` derives `Serialize` and carries no credentials
@@ -366,6 +377,43 @@ mod tests {
         );
     }
 
+    #[test]
+    fn system_prompt_embeds_sysinfo_block() {
+        let probe = "# host\nos: Linux\n# session\nshell: bash\n";
+        let rendered = SystemPromptTemplate { sysinfo: probe }.render().unwrap();
+
+        // The probe content is embedded verbatim inside a fenced block under
+        // the `# Host environment` heading, so the model can read the host/tool
+        // hints as data, not instructions. The opening fence is immediately
+        // followed by the probe's first section header; the shell kind is
+        // reported in the `# session` block.
+        assert!(
+            rendered.contains("# Host environment"),
+            "host-environment heading missing: {rendered}"
+        );
+        assert!(
+            rendered.contains("```\n# host\nos: Linux"),
+            "probe must appear inside the opening fence: {rendered}"
+        );
+        assert!(
+            rendered.contains("shell: bash"),
+            "shell kind must be reported: {rendered}"
+        );
+        // The prompt stays shell-agnostic: it must not hardcode \"Bash session\".
+        assert!(
+            !rendered.contains("an interactive Bash session"),
+            "system prompt must not hardcode a single shell: {rendered}"
+        );
+    }
+
+    #[test]
+    fn system_prompt_renders_with_empty_sysinfo() {
+        // `collect_sysinfo` returns an empty string on failure; the template
+        // must still render (the model just loses the environment hints).
+        let rendered = SystemPromptTemplate { sysinfo: "" }.render().unwrap();
+        assert!(rendered.contains("# Host environment"));
+    }
+
     fn ts_section_full(
         aid: &str,
         prompt: &str,
@@ -432,7 +480,7 @@ mod tests {
             })
             .unwrap();
 
-        let req = build_history(&store).unwrap();
+        let req = build_history(&store, "").unwrap();
         let json = serde_json::to_string(&req).unwrap();
 
         // Both finished-section commands are present.
@@ -488,7 +536,7 @@ mod tests {
             })
             .unwrap();
 
-        let req = build_history(&store).unwrap();
+        let req = build_history(&store, "").unwrap();
         let json = serde_json::to_string(&req).unwrap();
 
         // Finished section context is present.
@@ -587,7 +635,7 @@ mod tests {
             })
             .unwrap();
 
-        let req = build_history(&store).unwrap();
+        let req = build_history(&store, "").unwrap();
         let json = serde_json::to_string(&req).unwrap();
 
         // The replayed assistant turn is the same JSON shape the model

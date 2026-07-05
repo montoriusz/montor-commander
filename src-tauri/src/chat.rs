@@ -1,6 +1,7 @@
 mod generation;
 
 use crate::jsonl_store::{JsonlStore, ReadPage};
+use crate::shell::Shell;
 use crate::terminal::TerminalSession;
 use chrono::{Local, Utc};
 use serde::{Deserialize, Serialize};
@@ -137,6 +138,13 @@ pub struct ChatSession {
     pub id: String,
     store: Arc<JsonlStore<ChatMessage>>,
     generating: Arc<AtomicBool>,
+    /// Shell context derived from `$SHELL`. Owned by the chat session because it
+    /// caches the `*-sysinfo.sh` probe output for the lifetime of the session
+    /// (one probe per session, embedded into every system prompt for that
+    /// session). The PTY backend independently builds its own throwaway
+    /// [`Shell`] from `$SHELL` to spawn the shell; both agree on the kind because
+    /// they read the same environment variable.
+    shell: Arc<Shell>,
 }
 
 impl ChatSession {
@@ -157,6 +165,7 @@ impl ChatSession {
             id,
             store: Arc::new(store),
             generating: Arc::new(AtomicBool::new(false)),
+            shell: Arc::new(Shell::from_env()),
         })
     }
 
@@ -305,12 +314,23 @@ pub async fn send_chat_message(
 
     // Capture what the spawned task needs, then release the State borrow.
     let generating = session.generating.clone();
+    let shell = Arc::clone(&session.shell);
     let client = genai::Client::builder().build();
 
     tauri::async_runtime::spawn(async move {
         let ts = now_timestamp();
 
-        match generation::generate_assistant_reply(&client, &store, &ts).await {
+        // Resolve the system-info probe once per session. `Shell::sysinfo` runs
+        // the matching `*-sysinfo.sh` script on first call and returns the
+        // cached output afterwards. The first call is wrapped in
+        // `spawn_blocking` so the subprocess (a few hundred milliseconds of
+        // shell startup + probes) does not block the async runtime's worker
+        // thread; cached calls are cheap and the wrapping is harmless.
+        let sysinfo = tauri::async_runtime::spawn_blocking(move || shell.sysinfo().to_string())
+            .await
+            .unwrap_or_default();
+
+        match generation::generate_assistant_reply(&client, &store, &ts, &sysinfo).await {
             Ok(assistant_id) => {
                 emit_messages_changed(&app, assistant_id.to_string());
             }

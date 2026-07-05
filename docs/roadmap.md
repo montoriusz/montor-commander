@@ -7,9 +7,10 @@
 - Command-line guard — context-independent, security-focused review of LLM-suggested and user-entered commands:
   - On demand or always on (Guardian mode).
   - Potential loss rating indicator.
-- Enhanced system information in the system prompt (OS, shell, cwd).
-- Shell command discovery tools.
-- Silent filesystem traversal, file reading, and other safe read-only tools (keeping terminal space for critical operations only).
+- Extract CWD to `cwd` attribute of `<prompt>`.
+- Tools:
+  - Shell command discovery tools.
+  - Silent filesystem traversal, file reading, and other safe read-only tools (keeping terminal space for critical operations only).
 - Switch between different LLM models and providers
 - User-friendly command output representation (Markdown/HTML)
 - Utilize OSC 3008 for terminal session metadata.

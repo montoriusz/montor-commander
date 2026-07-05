@@ -11,7 +11,8 @@ use crate::chat::ChatSession;
 use crate::jsonl_store::JsonlStore;
 use crate::osc133::{Segment, ShellEvent};
 use crate::recorder::{LiveSectionKey, SessionRecorder, persist_section};
-use portable_pty::{CommandBuilder, PtyPair, PtySize, native_pty_system};
+use crate::shell::Shell;
+use portable_pty::{PtyPair, PtySize, native_pty_system};
 use std::{
     io::{Read, Write},
     sync::{
@@ -21,9 +22,7 @@ use std::{
     thread,
 };
 use tauri::{AppHandle, State, async_runtime::Mutex as AsyncMutex, ipc::Channel};
-
-/// Bash integration script embedded at compile time.
-static BASH_INTEGRATION: &str = include_str!("../assets/bash-integration.sh");
+use tempfile::TempDir;
 
 /// A single ordered stream of terminal events sent to the frontend over one
 /// `tauri::ipc::Channel`.
@@ -104,6 +103,13 @@ pub struct TerminalSession {
     /// path ignores it. Separate from `recorder`'s lock so the parse + write can
     /// happen outside the recorder lock.
     pub last_live_key: Arc<Mutex<Option<LiveSectionKey>>>,
+    /// Owns the unique temp dir the spawned shell's integration rc files were
+    /// written into by `Shell::build_pty_command`. The shell reads those files
+    /// from disk at startup (after spawn), so the dir must outlive the spawn —
+    /// and we have no clean sync for \"rc sourcing done\", so it stays alive for
+    /// the lifetime of this `TerminalSession` and is RAII-cleaned on drop.
+    /// Concurrent app instances get distinct temp dirs (no clobbering/leakage).
+    pub shell_assets: Arc<Mutex<Option<TempDir>>>,
 }
 
 #[tauri::command]
@@ -142,15 +148,25 @@ pub async fn create_shell(
 
         #[cfg(not(target_os = "windows"))]
         let mut cmd = {
-            // Write the bash integration script to a temp file.
-            let rcfile_path = std::env::temp_dir().join("montorcmd_bash.sh");
-            std::fs::write(&rcfile_path, BASH_INTEGRATION).map_err(|e| e.to_string())?;
-
-            let mut c = CommandBuilder::new("bash");
-            c.arg("--rcfile");
-            c.arg(rcfile_path);
-            c.arg("-i");
-            c
+            // Build the interactive-shell command (`bash --rcfile …` or
+            // `zsh -i` with a temp `ZDOTDIR`) from `$SHELL`. All shell-specific
+            // setup lives in `Shell::build_pty_command`; the terminal module is
+            // shell-agnostic and just forwards the resulting `CommandBuilder`.
+            let shell = Shell::from_env();
+            tracing::info!(
+                shell = shell.raw(),
+                kind = shell.kind().as_str(),
+                "spawning interactive shell"
+            );
+            // Create the temp dir here so this module owns its lifetime. The
+            // shell reads the rc files from disk at startup, so the dir must
+            // outlive the spawn; `TerminalSession::shell_assets` keeps it alive
+            // for the session lifetime and RAII-cleans it on drop. Unique paths
+            // mean concurrent app instances don't clobber each other's files.
+            let assets = tempfile::tempdir().map_err(|e| e.to_string())?;
+            let command = shell.build_pty_command(assets.path())?;
+            *state.shell_assets.lock().unwrap() = Some(assets);
+            command
         };
 
         #[cfg(target_os = "windows")]
@@ -310,5 +326,6 @@ pub fn build_session() -> TerminalSession {
         shell_started: Arc::new(AtomicBool::new(false)),
         recorder: Arc::new(Mutex::new(SessionRecorder::new(80, 24))),
         last_live_key: Arc::new(Mutex::new(None)),
+        shell_assets: Arc::new(Mutex::new(None)),
     }
 }

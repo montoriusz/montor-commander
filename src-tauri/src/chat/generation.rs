@@ -107,7 +107,7 @@ fn build_history(store: &JsonlStore<ChatMessage>, sysinfo: &str) -> Result<ChatR
 
     let page = store.read(0, None).map_err(|e| e.to_string())?;
 
-    // Accumulated `<prompt>/<command>/<output>` rendering of the terminal
+    // Accumulated `<prompt>/<commandline>/<output>` rendering of the terminal
     // sections seen since the previous user turn. This includes live
     // snapshots persisted by `send_chat_message` at send time. The command may:
     // - not been provided yet,
@@ -156,7 +156,7 @@ fn build_history(store: &JsonlStore<ChatMessage>, sysinfo: &str) -> Result<ChatR
 }
 
 /// Render one [`ChatMessage::TerminalSection`] into the
-/// `<prompt>/<command>/<output>` snippet expected inside a user turn's
+/// `<prompt>/<commandline>/<output>` snippet expected inside a user turn's
 /// `<terminal>` block (see `system_prompt.md`).
 ///
 /// A single code path serves both persisted-finished sections (the reader
@@ -183,9 +183,9 @@ fn render_section(section: &ChatMessage) -> String {
     let exit_code = *exit_code;
 
     let mut s = format!("<prompt>{prompt}</prompt>");
-    if !command.is_empty() {
+    if !command.is_empty() || executed {
         s.push_str(&format!(
-            "<command executed=\"{executed}\">{command}</command>\n"
+            "<commandline executed=\"{executed}\">{command}</commandline>"
         ));
     }
     // `finished` is only `"true"` when the recorder captured an exit code
@@ -198,7 +198,7 @@ fn render_section(section: &ChatMessage) -> String {
             None => ("false", String::new()),
         };
         s.push_str(&format!(
-            "<output finished=\"{finished}\"{exit_attr}>\n{output}\n</output>"
+            "\nn<output finished=\"{finished}\"{exit_attr}>\n{output}\n</output>"
         ));
     }
     s
@@ -276,13 +276,13 @@ mod tests {
     #[test]
     fn user_turn_template_renders_all_fields() {
         let rendered = UserTurnTemplate {
-            terminal: "<prompt>$</prompt>\n<command>ls</command>\n<output>\nfile.txt\nfile2.txt\n</output>",
+            terminal: "<prompt>$</prompt>\n<commandline>ls</commandline>\n<output>\nfile.txt\nfile2.txt\n</output>",
             message: "What does this file contain?",
         }
         .render()
         .unwrap();
 
-        assert!(rendered.contains("<terminal>\n<prompt>$</prompt>\n<command>ls</command>\n<output>\nfile.txt\nfile2.txt\n</output>\n</terminal>"));
+        assert!(rendered.contains("<terminal>\n<prompt>$</prompt>\n<commandline>ls</commandline>\n<output>\nfile.txt\nfile2.txt\n</output>\n</terminal>"));
         assert!(rendered.contains("<user_message>What does this file contain?</user_message>"));
         // Content inside tags must be unescaped.
         assert!(rendered.contains("<prompt>$</prompt>"));
@@ -325,7 +325,7 @@ mod tests {
         let s = render_section(&ts_live_section("1", "user@h:~$ ", "ls -la"));
         assert_eq!(
             s,
-            "<prompt>user@h:~$ </prompt><command executed=\"false\">ls -la</command>\n"
+            "<prompt>user@h:~$ </prompt><commandline executed=\"false\">ls -la</commandline>\n"
         );
     }
 
@@ -339,7 +339,7 @@ mod tests {
         let s = render_section(&section);
         assert_eq!(
             s,
-            "<prompt>$ </prompt><command executed=\"true\">./slow-binary</command>\n<output finished=\"false\">\nbuilding…\n</output>"
+            "<prompt>$ </prompt><commandline executed=\"true\">./slow-binary</commandline>\n<output finished=\"false\">\nbuilding…\n</output>"
         );
     }
 
@@ -348,7 +348,7 @@ mod tests {
         let s = render_section(&ts_section_full("1", "$ ", "ls", "a\nb", true, None));
         assert_eq!(
             s,
-            "<prompt>$ </prompt><command executed=\"true\">ls</command>\n<output finished=\"false\">\na\nb\n</output>"
+            "<prompt>$ </prompt><commandline executed=\"true\">ls</commandline>\n<output finished=\"false\">\na\nb\n</output>"
         );
     }
 
@@ -357,7 +357,7 @@ mod tests {
         let s = render_section(&ts_section_full("1", "$ ", "false", "", true, Some(1)));
         assert_eq!(
             s,
-            "<prompt>$ </prompt><command executed=\"true\">false</command>\n"
+            "<prompt>$ </prompt><commandline executed=\"true\">false</commandline>\n"
         );
     }
 
@@ -373,7 +373,7 @@ mod tests {
         ));
         assert_eq!(
             s,
-            "<prompt>$ </prompt><command executed=\"true\">ls /nope</command>\n<output finished=\"true\" exit-code=\"2\">\nls: cannot access '/nope': No such file or directory\n</output>"
+            "<prompt>$ </prompt><commandline executed=\"true\">ls /nope</commandline>\n<output finished=\"true\" exit-code=\"2\">\nls: cannot access '/nope': No such file or directory\n</output>"
         );
     }
 
@@ -484,11 +484,11 @@ mod tests {
         let json = serde_json::to_string(&req).unwrap();
 
         // Both finished-section commands are present.
-        assert!(json.contains(r#"<command executed=\"true\">ls</command>"#));
-        assert!(json.contains(r#"<command executed=\"true\">pwd</command>"#));
+        assert!(json.contains(r#"<commandline executed=\"true\">ls</commandline>"#));
+        assert!(json.contains(r#"<commandline executed=\"true\">pwd</commandline>"#));
         // The live (unexecuted) commandline persisted at send time is rendered.
         assert!(
-            json.contains(r#"<command executed=\"false\">cd /y</command>"#),
+            json.contains(r#"<commandline executed=\"false\">cd /y</commandline>"#),
             "live commandline dropped: {json}"
         );
         // Both user messages are present.
@@ -540,15 +540,15 @@ mod tests {
         let json = serde_json::to_string(&req).unwrap();
 
         // Finished section context is present.
-        assert!(json.contains(r#"<command executed=\"true\">pwd</command>"#));
+        assert!(json.contains(r#"<commandline executed=\"true\">pwd</commandline>"#));
         // The live prompt is rendered into the <terminal> block with the
-        // unexecuted commandline as `<command executed="false">`, both
+        // unexecuted commandline as `<commandline executed="false">`, both
         // anchored to the turn that asked about it.
         assert!(
             json.contains("<prompt>user@host:~/proj$</prompt>"),
             "live prompt missing: {json}"
         );
-        assert!(json.contains(r#"<command executed=\"false\">ls -la</command>"#));
+        assert!(json.contains(r#"<commandline executed=\"false\">ls -la</commandline>"#));
         assert!(json.contains("<user_message>what does this do?</user_message>"));
     }
 
@@ -601,7 +601,7 @@ mod tests {
         ));
         assert_eq!(
             s,
-            "<prompt>$ </prompt><command executed=\"false\">./slow-binary</command>\n<output finished=\"false\">\nkilled by signal\n</output>"
+            "<prompt>$ </prompt><commandline executed=\"false\">./slow-binary</commandline>\n<output finished=\"false\">\nkilled by signal\n</output>"
         );
     }
 

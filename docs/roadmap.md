@@ -3,6 +3,7 @@
 ## Features
 
 - Terminal-chat view modes: Balloons, Split-view, Notebook.
+- Switch between different LLM models and providers
 - UI options — colors and fonts (scope TBD: theme presets vs. full custom theming, automatic system colors theme).
 - Command-line guard — context-independent, security-focused review of LLM-suggested and user-entered commands:
   - On demand or always on (Guardian mode).
@@ -11,7 +12,6 @@
 - Tools:
   - Shell command discovery tools.
   - Silent filesystem traversal, file reading, and other safe read-only tools (keeping terminal space for critical operations only).
-- Switch between different LLM models and providers
 - User-friendly command output representation (Markdown/HTML)
 - Utilize OSC 3008 for terminal session metadata.
 - LLM-generated forms for user input

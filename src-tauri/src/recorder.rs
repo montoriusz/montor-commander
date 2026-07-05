@@ -153,8 +153,8 @@ impl SessionSection {
     }
 }
 
-/// The three plain-text fragments parsed out of a finished [`CurrentSection`].
-/// See [`CurrentSection::parsed_parts`].
+/// The three plain-text fragments parsed out of a finished [`SessionSection`].
+/// See [`SessionSection::parsed_parts`].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ParsedSection {
     pub prompt: String,
@@ -166,6 +166,11 @@ pub struct SessionRecorder {
     current: Option<SessionSection>,
     cols: u16,
     rows: u16,
+    /// Parsed command line of the last section yielded for the *current* `aid`
+    /// via a same-`aid` prompt redraw. Reset whenever a genuinely new `aid`
+    /// starts. Used to dedup pure re-renders (resize) from real command-line
+    /// changes (tab completion) — see the `PromptStarted` arm in [`feed`].
+    last_yielded_cmdline: String,
 }
 
 impl SessionRecorder {
@@ -174,6 +179,7 @@ impl SessionRecorder {
             current: None,
             cols,
             rows,
+            last_yielded_cmdline: String::new(),
         }
     }
 
@@ -190,7 +196,7 @@ impl SessionRecorder {
         }
     }
 
-    /// Feed one scanned [`Segment`]. Returns a finished [`CurrentSection`] when a
+    /// Feed one scanned [`Segment`]. Returns a finished [`SessionSection`] when a
     /// `CommandFinished` closes the active section, so the caller can persist it.
     pub fn feed(&mut self, segment: &Segment) -> Option<SessionSection> {
         match segment {
@@ -202,22 +208,53 @@ impl SessionRecorder {
             }
             Segment::Sequence { bytes, event } => match event {
                 ShellEvent::PromptStarted { aid } => {
-                    let previous_section;
-                    if let Some(section) = &self.current
-                        && !section.off_prompt_end.is_none()
-                    {
-                        previous_section = self.current.take();
-                    } else {
-                        previous_section = None;
-                    }
-                    // Start a new section. The bash integration emits aid on
-                    // every marker; fall back to an empty id defensively.
-                    let aid = aid.clone().unwrap_or_default();
-                    let mut section = SessionSection::new(aid, self.cols, self.rows);
-                    // Keep the A marker bytes in `raw` so re-render sees them.
+                    // The bash integration emits `aid` on every marker; fall
+                    // back to an empty id defensively.
+                    let incoming_aid = aid.clone().unwrap_or_default();
+
+                    let previous_section = match self.current.take() {
+                        Some(section) if section.aid == incoming_aid => {
+                            // Same-aid redraw: bash re-emits OSC 133 A/B for
+                            // the current prompt without a preceding D whenever
+                            // readline re-renders it — either a resize (leaving
+                            // the typed command unchanged) or a tab completion
+                            // (redraw with a *changed* command line). Only the
+                            // latter is genuine context worth persisting, so
+                            // yield only when the parsed command line changed
+                            // since the last section we yielded for this aid.
+                            let cmdline = section.parsed_parts().cmdline;
+                            if cmdline != self.last_yielded_cmdline {
+                                self.last_yielded_cmdline = cmdline;
+                                Some(section)
+                            } else {
+                                None
+                            }
+                        }
+                        Some(section) if section.off_prompt_end.is_some() => {
+                            // A genuinely new prompt (different aid) closed the
+                            // in-flight section without a D — bash normally emits
+                            // D in PROMPT_COMMAND before each A, so this only
+                            // happens when it skipped (startup, abnormal exit).
+                            // Yield what we captured so the reader thread can
+                            // persist it. Requires B to have fired: a bare
+                            // A-only fragment has nothing useful to keep.
+                            self.last_yielded_cmdline = String::new();
+                            Some(section)
+                        }
+                        _ => {
+                            // No previous section, or only a bare A-only
+                            // fragment that is not worth keeping. Reset and
+                            // yield nothing.
+                            self.last_yielded_cmdline = String::new();
+                            None
+                        }
+                    };
+
+                    // Start the new section, keeping the A marker bytes in `raw`
+                    // so a later redraw can replay them.
+                    let mut section = SessionSection::new(incoming_aid, self.cols, self.rows);
                     section.raw.extend_from_slice(bytes);
                     self.current = Some(section);
-                    // Yield the previous section if it hasn't been taken and a new prompt starts
                     previous_section
                 }
                 ShellEvent::PromptEnded { .. } => {
@@ -398,7 +435,6 @@ pub fn persist_live_section_if_changed(
     if !live_snapshot_changed(&new_key, &*guard) {
         return Ok(false);
     }
-    // Parse already done; write outside the recorder lock.
     write_section(section, &parsed, None, store, app)?;
     *guard = Some(new_key);
     drop(guard);
@@ -470,6 +506,208 @@ mod tests {
             "feed should return a finished section on D"
         );
         finished.unwrap()
+    }
+
+    /// Mimic a same-`aid` prompt redraw: bash emits a fresh `\r\u001b[K\r`
+    /// clear-and-return, then OSC 133 A/B again for the same aid, after which
+    /// readline re-renders `typed` as the command line. Both resize (unchanged
+    /// `typed`) and tab completion (grown/changed `typed`) look like this.
+    /// Returns whatever `feed` yielded from the redraw's OSC 133 A.
+    fn feed_redraw(
+        rec: &mut SessionRecorder,
+        aid: &str,
+        prompt: &str,
+        typed: &str,
+    ) -> Option<SessionSection> {
+        rec.feed(&Segment::Passthrough(b"\r\x1b[K\r".to_vec()));
+        let yielded = rec.feed(&Segment::Sequence {
+            bytes: bel("A", aid),
+            event: ShellEvent::PromptStarted {
+                aid: Some(aid.into()),
+            },
+        });
+        rec.feed(&Segment::Passthrough(prompt.as_bytes().to_vec()));
+        rec.feed(&Segment::Sequence {
+            bytes: bel("B", aid),
+            event: ShellEvent::PromptEnded {
+                aid: Some(aid.into()),
+            },
+        });
+        if !typed.is_empty() {
+            rec.feed(&Segment::Passthrough(typed.as_bytes().to_vec()));
+        }
+        yielded
+    }
+
+    #[test]
+    fn resize_redraw_with_unchanged_command_does_not_yield_a_duplicate() {
+        // A pure resize redraws the same prompt + same typed command under the
+        // same aid. The recorder must NOT yield the in-flight section — else
+        // every resize persists a spurious duplicate of the same unfinished
+        // prompt. The command is re-rendered into the fresh section instead.
+        let mut rec = SessionRecorder::new(80, 24);
+        build_section_with_prompt(&mut rec, "1-1", "$ ", "ls -la");
+
+        // readline re-renders the same `ls -la` after the redraw.
+        let yielded = feed_redraw(&mut rec, "1-1", "$ ", "ls -la");
+        assert!(
+            yielded.is_none(),
+            "unchanged-command redraw must not yield a section"
+        );
+
+        let current = rec
+            .current_snapshot()
+            .expect("current section after redraw");
+        assert_eq!(current.aid, "1-1");
+        assert_eq!(current.parsed_parts().cmdline, "ls -la");
+    }
+
+    /// Mimic a same-`aid` prompt redraw where the command line stays rendered
+    /// (no clear-to-end-of-line), as with tab completion: readline prints its
+    /// candidate list, re-emits OSC 133 A/B, and re-echoes the (now longer)
+    /// command. The previous section therefore parses to the command as it
+    /// stood before this redraw. Returns whatever the redraw's A yielded.
+    fn feed_completion_redraw(
+        rec: &mut SessionRecorder,
+        aid: &str,
+        prompt: &str,
+        typed: &str,
+    ) -> Option<SessionSection> {
+        let yielded = rec.feed(&Segment::Sequence {
+            bytes: bel("A", aid),
+            event: ShellEvent::PromptStarted {
+                aid: Some(aid.into()),
+            },
+        });
+        rec.feed(&Segment::Passthrough(prompt.as_bytes().to_vec()));
+        rec.feed(&Segment::Sequence {
+            bytes: bel("B", aid),
+            event: ShellEvent::PromptEnded {
+                aid: Some(aid.into()),
+            },
+        });
+        if !typed.is_empty() {
+            rec.feed(&Segment::Passthrough(typed.as_bytes().to_vec()));
+        }
+        yielded
+    }
+
+    #[test]
+    fn tab_completion_redraws_persist_each_changed_commandline_attempt() {
+        // Tab completion redraws the prompt with a *changed* command line under
+        // the same aid, leaving the command rendered. Each distinct attempt is
+        // genuine context and must be yielded (persisted), unlike a pure resize.
+        let mut rec = SessionRecorder::new(80, 24);
+        build_section_with_prompt(&mut rec, "1-1", "$ ", "gi");
+
+        // `gi` <tab> completes to `git ` — the previous `gi` attempt is yielded.
+        let first = feed_completion_redraw(&mut rec, "1-1", "$ ", "git ")
+            .expect("changed command line should be yielded");
+        assert_eq!(first.aid, "1-1");
+        assert_eq!(first.parsed_parts().cmdline, "gi");
+
+        // `git s` <tab> completes to `git status` — the `git ` attempt yields.
+        let second = feed_completion_redraw(&mut rec, "1-1", "$ ", "git status")
+            .expect("further changed command line should be yielded");
+        assert_eq!(second.aid, "1-1");
+        assert_eq!(second.parsed_parts().cmdline, "git");
+
+        // The `git status` attempt is yielded once (it differs from `git `)…
+        let third = feed_completion_redraw(&mut rec, "1-1", "$ ", "git status")
+            .expect("the git status attempt should be yielded once");
+        assert_eq!(third.parsed_parts().cmdline, "git status");
+
+        // …but a further redraw that leaves it unchanged (e.g. a resize now) is
+        // deduped and not persisted again.
+        let fourth = feed_completion_redraw(&mut rec, "1-1", "$ ", "git status");
+        assert!(
+            fourth.is_none(),
+            "unchanged command line must not re-yield after completions"
+        );
+
+        assert_eq!(rec.current_snapshot().unwrap().aid, "1-1");
+    }
+
+    #[test]
+    fn feed_yields_unfinished_previous_section_when_a_new_aid_starts() {
+        // A genuine new prompt (different aid) closes the in-flight one even
+        // without an OSC 133 D — e.g. bash skipped PROMPT_COMMAND. The recorder
+        // still hands the captured section back so the reader thread persists
+        // whatever prompt/command it saw.
+        let mut rec = SessionRecorder::new(80, 24);
+        build_section_with_prompt(&mut rec, "1-1", "$ ", "ls -la");
+
+        let yielded = rec.feed(&Segment::Sequence {
+            bytes: bel("A", "1-2"),
+            event: ShellEvent::PromptStarted {
+                aid: Some("1-2".into()),
+            },
+        });
+        let previous = yielded.expect("previous section should be yielded on a new aid");
+        assert_eq!(previous.aid, "1-1");
+        assert_eq!(previous.parsed_parts().cmdline, "ls -la");
+
+        assert!(rec.current_snapshot().is_some());
+        assert_eq!(rec.current_snapshot().unwrap().aid, "1-2");
+    }
+
+    #[test]
+    fn resize_does_not_persist_duplicate_live_section_across_redraws() {
+        // Simulate the full sequence recorded in the chat store by the bug
+        // report: prompt rendered, then two resize redraws (different cols),
+        // then a send that takes the live snapshot. With the redraw fix, only
+        // the send-time live snapshot should ever be persisted; the redraws
+        // themselves produce no finished SectionEvents.
+        let mut rec = SessionRecorder::new(80, 24);
+        build_section_with_prompt(&mut rec, "1-1", "$ ", "");
+
+        let mut persisted: Vec<SessionSection> = Vec::new();
+
+        // First resize (68x42) then redraw — empty command, unchanged.
+        rec.set_size(42, 68);
+        if let Some(s) = feed_redraw(&mut rec, "1-1", "$ ", "") {
+            persisted.push(s);
+        }
+
+        // Second resize (38x101) then redraw — still empty, unchanged.
+        rec.set_size(38, 101);
+        if let Some(s) = feed_redraw(&mut rec, "1-1", "$ ", "") {
+            persisted.push(s);
+        }
+
+        assert!(
+            persisted.is_empty(),
+            "redraws must not yield finished sections"
+        );
+
+        // The send-time path snapshots `current` directly; assert it's still
+        // alive and carries the latest geometry from the recorder.
+        let live = rec
+            .current_snapshot()
+            .expect("live section still in recorder");
+        assert_eq!(live.aid, "1-1");
+        assert_eq!(live.cols, 101);
+        assert_eq!(live.rows, 38);
+        assert!(!live.executed());
+    }
+
+    fn build_section_with_prompt(rec: &mut SessionRecorder, aid: &str, prompt: &str, typed: &str) {
+        rec.feed(&Segment::Sequence {
+            bytes: bel("A", aid),
+            event: ShellEvent::PromptStarted {
+                aid: Some(aid.into()),
+            },
+        });
+        rec.feed(&Segment::Passthrough(prompt.as_bytes().to_vec()));
+        rec.feed(&Segment::Sequence {
+            bytes: bel("B", aid),
+            event: ShellEvent::PromptEnded {
+                aid: Some(aid.into()),
+            },
+        });
+        if !typed.is_empty() {
+            rec.feed(&Segment::Passthrough(typed.as_bytes().to_vec()));
+        }
     }
 
     #[test]

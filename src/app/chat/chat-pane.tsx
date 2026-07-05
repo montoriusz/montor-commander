@@ -179,7 +179,7 @@ export function ChatPane() {
   let lastTerminalStartSectionId: string | null = null;
   let lastTerminalEndSectionId: string | null = null;
   const getTerminalSectionBounds = (message: ChatMessage) => {
-    if (message.type === 'TerminalSection') {
+    if (message.type === 'TerminalSection' && message.exit_code != null) {
       if (lastTerminalStartSectionId === null) {
         lastTerminalStartSectionId = message.aid;
       }

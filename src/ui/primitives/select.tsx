@@ -2,7 +2,7 @@
 import type { Assign, SelectRootProps } from '@ark-ui/react';
 import { ark } from '@ark-ui/react/factory';
 import { Select, useSelectItemContext } from '@ark-ui/react/select';
-import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
+import { CheckIcon, ChevronDownIcon } from 'lucide-react';
 import { forwardRef, type RefAttributes } from 'react';
 import { createStyleContext } from 'styled-system/jsx';
 import { type SelectVariantProps, select } from 'styled-system/recipes';
@@ -30,7 +30,7 @@ export const Positioner = withContext(Select.Positioner, 'positioner');
 export const Trigger = withContext(Select.Trigger, 'trigger');
 export const ValueText = withContext(Select.ValueText, 'valueText');
 export const Indicator = withContext(Select.Indicator, 'indicator', {
-  defaultProps: { children: <ChevronsUpDownIcon /> },
+  defaultProps: { children: <ChevronDownIcon /> },
 });
 
 // eslint-disable-next-line react-refresh/only-export-components

@@ -1,6 +1,5 @@
-import { createRoot } from 'react-dom/client';
-import { App } from '@/app/app';
+import { windowManager } from '@/app/window-manager';
 import 'styled-system/styles.css';
-import '@/app/index.css';
+import '@/index.css';
 
-createRoot(document.getElementById('root')!).render(<App />);
+windowManager.bootstrap();

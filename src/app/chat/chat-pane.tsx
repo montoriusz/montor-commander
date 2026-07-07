@@ -1,7 +1,7 @@
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, Settings } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { css } from 'styled-system/css';
-import { Box, Flex, VStack } from 'styled-system/jsx';
+import { Box, Flex, styled, VStack } from 'styled-system/jsx';
 import { sectionConnector } from 'styled-system/recipes';
 import type { ChatMessage } from '@/generated';
 import {
@@ -11,8 +11,9 @@ import {
 import { Markdown } from '@/ui/composites/markdown';
 import { IconButton, RelativeTime, SkeletonText, Spinner, Textarea } from '@/ui/primitives';
 import * as ScrollArea from '@/ui/primitives/scroll-area';
-import { useEmitUpdateMatching } from '../section-matching';
-import { commandlineController, terminal } from '../terminal';
+import { commandlineController, terminal, terminalSections } from '../terminal';
+import { useEmitUpdateMatching } from '../terminal/section-matching';
+import { windowManager } from '../window-manager';
 import { useChat } from './use-chat';
 
 interface MessageBubbleProps {
@@ -27,7 +28,7 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
   const isUser = msg.type === 'User';
   // `cmdline` exists only on User/Assistant; null for TerminalSection so the
   // suggestion action is a no-op for those (which render nothing anyway).
-  const cmdline = msg.type === 'TerminalSection' ? null : msg.cmdline;
+  const cmdline = msg.type === 'Assistant' ? msg.cmdline : null;
   const actionHandler = useCallback(
     (event: CommandlineSuggestionAction) => {
       if (!cmdline) return;
@@ -46,11 +47,9 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
         <Flex
           maxW="11/12"
           px="3r"
-          mb="1"
           borderRadius="l3"
           borderWidth="1"
-          borderColor="gray.8"
-          bg="black"
+          bg="gray.surface.bg"
           color="gray.surface.fg"
           gap="2"
         >
@@ -69,7 +68,7 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
           )}
         </Flex>
       )}
-      <Box color="fg.muted" fontSize="xs">
+      <Box color="fg.muted" fontSize="xs" mt="1">
         <RelativeTime value={msg.ts} />
         {msg.type === 'Assistant' ? <>&ensp;&bull;&ensp;{msg.model}</> : null}
       </Box>
@@ -77,7 +76,6 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
   );
 }
 
-// TODO: add form element
 // TODO: allow sending empty messages if terminal output is present
 
 export function ChatPane() {
@@ -136,6 +134,9 @@ export function ChatPane() {
     // Fake `isGenerating` usage
     isGenerating;
     if (messages.length === 0) return;
+
+    emitUpdateMatchingRef.current?.();
+
     const el = viewportRef.current;
     if (!el || distanceFromBottomRef.current > 20) return;
     el.scrollTop = el.scrollHeight;
@@ -158,11 +159,10 @@ export function ChatPane() {
     [handleSubmit],
   );
 
-  const lastUserCommandline = messages.findLast((msg) => msg.type === 'User')?.cmdline ?? '';
-
   const suggestionActionHandler = useCallback(
     (event: CommandlineSuggestionAction, command: string) => {
       if (event === 'reject') {
+        const lastUserCommandline = 'todo';
         commandlineController.put(lastUserCommandline);
       } else if (!command) {
         return;
@@ -173,7 +173,7 @@ export function ChatPane() {
         terminal.focus();
       }
     },
-    [lastUserCommandline],
+    [],
   );
 
   let lastTerminalStartSectionId: string | null = null;
@@ -193,19 +193,26 @@ export function ChatPane() {
   };
 
   return (
-    <Flex flexDirection="column" h="full" pr="0.5" flexGrow="1" overflow="hidden">
-      <Box
-        p="3"
-        borderBottomWidth="1px"
-        borderColor="border"
-        fontWeight="semibold"
-        fontSize="lg"
-        bg="gray.4"
-      >
-        Terminal Assistant
-      </Box>
+    <Flex flexDirection="column" h="full" pr="1" flexGrow="1" overflow="hidden">
+      <Flex bg="surface" alignItems="center">
+        <Box p="3" fontWeight="semibold" textStyle="lg" flexGrow="1">
+          Terminal Assistant
+        </Box>
+        <Box pr="2">
+          <IconButton size="xs" variant="plain" onClick={openSettings}>
+            <Settings />
+          </IconButton>
+        </Box>
+      </Flex>
 
-      <Flex flexDirection="column" bg="gray.2" flex="1" borderRadius="l3" overflow="hidden">
+      <Flex
+        flexDirection="column"
+        bg="gray.2"
+        flex="1"
+        borderRadius="l3"
+        borderWidth="1px"
+        overflow="hidden"
+      >
         <ScrollArea.Root flex="1" size="lg">
           <ScrollArea.Viewport ref={viewportRef} py="1" pr="3" pl="4">
             {messages.map((msg) => {
@@ -213,8 +220,13 @@ export function ChatPane() {
               return (
                 <Fragment key={msg.id}>
                   {sectionBoundary && (
-                    <Box
-                      className={sectionConnector({ separator: true })}
+                    <styled.button
+                      type="button"
+                      onClick={connectorClickHandler}
+                      className={sectionConnector({
+                        separator: true,
+                      })}
+                      disabled={!isSectionConnectorActive(sectionBoundary[1])}
                       data-term-sect-id={sectionBoundary[1]}
                     />
                   )}
@@ -270,3 +282,20 @@ export function ChatPane() {
     </Flex>
   );
 }
+
+const connectorClickHandler = (e: React.MouseEvent) => {
+  const target = e.target as HTMLElement;
+  const sectionId = target.getAttribute('data-term-sect-id');
+  if (sectionId) {
+    terminalSections.scrollToSectionEnd(sectionId);
+  }
+};
+
+const isSectionConnectorActive = (sectionId: string | null) => {
+  if (sectionId == null) return false;
+  return terminalSections.isSectionAvailable(sectionId);
+};
+
+const openSettings = () => {
+  windowManager.open('settings');
+};

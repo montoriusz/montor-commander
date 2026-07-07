@@ -7,9 +7,9 @@ export const globalCss = {
       '--global-color-focus-ring': 'colors.colorPalette.solid.bg',
     },
     ':root': {
-      fontSize: '92%',
+      // TODO: move to settings
       colorPalette: 'green',
-      background: 'canvas',
+      background: 'surface',
     },
     body: {
       color: 'fg.default',

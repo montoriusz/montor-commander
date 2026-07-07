@@ -1,5 +1,5 @@
-import { tabsAnatomy } from '@ark-ui/react/anatomy'
-import { defineSlotRecipe } from '@pandacss/dev'
+import { tabsAnatomy } from '@ark-ui/react/anatomy';
+import { defineSlotRecipe } from '@pandacss/dev';
 
 export const tabs = defineSlotRecipe({
   slots: tabsAnatomy.keys(),
@@ -42,6 +42,9 @@ export const tabs = defineSlotRecipe({
       },
       _disabled: {
         layerStyle: 'disabled',
+      },
+      _vertical: {
+        textAlign: 'left',
       },
     },
     content: {
@@ -129,13 +132,13 @@ export const tabs = defineSlotRecipe({
       enclosed: {
         list: {
           bg: {
-            _light: 'gray.2',
-            _dark: 'gray.1',
+            _light: 'gray.3',
+            _dark: 'gray.2',
           },
           boxShadow: 'inset 0 0 0px 1px var(--shadow-color)',
           boxShadowColor: 'border',
           borderRadius: 'l3',
-          p: '1',
+          p: '1.5',
         },
         trigger: {
           color: 'fg.muted',
@@ -149,10 +152,12 @@ export const tabs = defineSlotRecipe({
             _light: 'xs',
             _dark: 'none',
           },
-          bg: {
-            _light: 'white',
-            _dark: 'gray.2',
-          },
+          // bg: {
+          //   _light: 'white',
+          //   _dark: 'gray.3',
+          // },
+          bg: 'colorPalette.subtle.bg',
+          color: 'colorPalette.subtle.fg',
         },
       },
     },
@@ -174,4 +179,4 @@ export const tabs = defineSlotRecipe({
     size: 'md',
     variant: 'line',
   },
-})
+});

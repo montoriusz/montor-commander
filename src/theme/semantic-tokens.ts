@@ -33,10 +33,17 @@ export const semanticTokens = {
       },
     },
 
-    border: {
+    surface: {
       value: {
         _light: '{colors.gray.4}',
         _dark: '{colors.gray.4}',
+      },
+    },
+
+    border: {
+      value: {
+        _light: '{colors.gray.6}',
+        _dark: '{colors.gray.6}',
       },
     },
 
@@ -44,6 +51,13 @@ export const semanticTokens = {
       value: {
         _light: '{colors.green.9}',
         _dark: '{colors.green.9}',
+      },
+    },
+
+    warning: {
+      value: {
+        _light: '{colors.amber.10}',
+        _dark: '{colors.amber.9}',
       },
     },
 
@@ -55,9 +69,17 @@ export const semanticTokens = {
     },
 
     sectionConnector: {
-      value: {
-        _light: '{colors.gray.a5}',
-        _dark: '{colors.gray.a5}',
+      DEFAULT: {
+        value: {
+          _light: '#80808080',
+          _dark: '#80808080',
+        },
+      },
+      hover: {
+        value: {
+          _light: '#808080',
+          _dark: '#808080',
+        },
       },
     },
   },

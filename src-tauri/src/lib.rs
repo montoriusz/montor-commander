@@ -2,11 +2,31 @@ pub mod chat;
 mod jsonl_store;
 mod osc133;
 mod recorder;
+mod settings;
 mod shell;
 mod terminal;
 
 use chat::ChatSession;
 use tauri::Manager;
+
+/// Workaround for Wayland environments on Linux:
+/// After hiding and showing a window, the title bar buttons
+/// (close, minimize, maximize) may stop working.
+/// Toggling the resizable property appears to resolve this.
+///
+/// Registered globally via [`tauri::Builder::on_window_event`] so it applies to
+/// every window, including ones created later from the frontend.
+///
+/// Issue: <https://github.com/tauri-apps/tauri/issues/11856>
+#[cfg(target_os = "linux")]
+fn apply_wayland_titlebar_fix(window: &tauri::Window, event: &tauri::WindowEvent) {
+    // Perform fix every time the window is focused.
+    if let tauri::WindowEvent::Focused(true) = event {
+        // Fix (toggle resizable property off and then on).
+        let _ = window.set_resizable(false);
+        let _ = window.set_resizable(true);
+    }
+}
 
 /// Initialize the `tracing` logging subscriber.
 ///
@@ -49,7 +69,19 @@ pub fn run() {
             let chat_session = ChatSession::new(&data_dir).expect("failed to create chat session");
             app.manage(chat_session);
 
+            let config_dir = app
+                .path()
+                .app_config_dir()
+                .expect("failed to resolve app config dir");
+            let settings_state =
+                settings::SettingsState::load(&config_dir).expect("failed to load settings state");
+            app.manage(settings_state);
+
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "linux")]
+            apply_wayland_titlebar_fix(window, event);
         })
         .manage(terminal_session)
         .invoke_handler(tauri::generate_handler![
@@ -59,6 +91,12 @@ pub fn run() {
             chat::get_chat_session,
             chat::read_chat_messages,
             chat::send_chat_message,
+            settings::get_settings,
+            settings::get_settings_by_categories,
+            settings::save_settings,
+            settings::llm_providers::all_model_names,
+            settings::llm_providers::get_providers,
+            settings::llm_providers::new_provider_id
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

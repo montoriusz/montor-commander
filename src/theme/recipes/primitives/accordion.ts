@@ -1,5 +1,5 @@
-import { accordionAnatomy } from '@ark-ui/react/anatomy'
-import { defineSlotRecipe } from '@pandacss/dev'
+import { accordionAnatomy } from '@ark-ui/react/anatomy';
+import { defineSlotRecipe } from '@pandacss/dev';
 
 export const accordion = defineSlotRecipe({
   className: 'accordion',
@@ -73,6 +73,32 @@ export const accordion = defineSlotRecipe({
         },
       },
       plain: {},
+      leveled: {
+        root: {
+          '--accordion-radius': 'radii.l3',
+          borderWidth: '1px',
+          borderRadius: 'var(--accordion-radius)',
+        },
+        item: {
+          borderTopWidth: '1px',
+          _first: {
+            borderTopWidth: '0',
+          },
+        },
+        itemIndicator: {
+          mr: '4',
+        },
+        itemTrigger: {
+          minHeight: '14',
+          borderRadius: '0',
+        },
+        itemContent: {
+          borderTopWidth: '1px',
+          p: '4',
+          bg: 'gray.2',
+          borderRadius: '0',
+        },
+      },
     },
     size: {
       md: {
@@ -87,4 +113,4 @@ export const accordion = defineSlotRecipe({
       },
     },
   },
-})
+});

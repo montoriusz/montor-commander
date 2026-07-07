@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { css } from 'styled-system/css';
 import { sectionConnector } from 'styled-system/recipes';
 import { token } from 'styled-system/tokens';
-import { useDebouncedCallback } from '../shared/use-debounced-callback';
+import { useDebouncedCallback } from '@/app/shared/use-debounced-callback';
 import { UpdateMatchingContext } from './context';
 
 export interface SectionMatchingProps {}
@@ -52,13 +52,13 @@ export function SectionMatching() {
       if (!termEl) continue;
 
       const termRect = termEl.getBoundingClientRect();
-      const startX = termRect.right - svgRect.left;
+      const startX = termRect.right - svgRect.left + 1;
       const termY = termRect.top - svgRect.top + 1;
 
       if (termY < 0 || termY > svgRect.height) continue;
 
       const chatRect = chatEl.getBoundingClientRect();
-      const endX = chatRect.left - svgRect.left;
+      const endX = chatRect.left - svgRect.left - 1;
       const chatY = chatRect.top - svgRect.top + 1;
       next.push({
         id: `cn:${sectId}`,

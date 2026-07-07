@@ -21,15 +21,14 @@ export const collapsible = defineSlotRecipe({
     variant: {
       command: {
         root: {
-          transitionProperty: 'padding',
+          transitionProperty: 'padding, translate',
           transitionDuration: 'fast',
           minHeight: '0',
           pt: '0.5',
           pb: '0',
           position: 'relative',
           _open: {
-            pt: '2',
-            pb: '2',
+            pb: '2.5',
           },
         },
         content: {

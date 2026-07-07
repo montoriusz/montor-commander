@@ -1,5 +1,5 @@
 'use client';
-import { Splitter } from '@ark-ui/react/splitter';
+import { Splitter, type SplitterRootBaseProps } from '@ark-ui/react/splitter';
 import type { ComponentProps } from 'react';
 import { createStyleContext } from 'styled-system/jsx';
 import { splitter } from 'styled-system/recipes';
@@ -15,5 +15,7 @@ export const ResizeTriggerIndicator = withContext(
   Splitter.ResizeTriggerIndicator,
   'resizeTriggerIndicator',
 );
+
+export type PanelData = SplitterRootBaseProps['panels'][number];
 
 export { SplitterContext as Context } from '@ark-ui/react/splitter';

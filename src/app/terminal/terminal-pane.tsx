@@ -2,8 +2,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Box } from 'styled-system/jsx';
 
 import '@xterm/xterm/css/xterm.css';
-import { useEmitUpdateMatching } from '../section-matching/use-emit-update-matching';
 import { useDebouncedCallback } from '../shared/use-debounced-callback';
+import { useEmitUpdateMatching } from './section-matching';
 import { fitTerminal, terminal } from './terminal';
 
 export interface TerminalHandle {
@@ -13,7 +13,6 @@ export interface TerminalHandle {
 export const TerminalPane = forwardRef<TerminalHandle>(function TerminalPane(_, handleRef) {
   const containerRef = useRef<HTMLDivElement>(null);
   const emitUpdateMatching = useEmitUpdateMatching();
-
   const scheduleFit = useDebouncedCallback(fitTerminal, 100);
 
   useImperativeHandle(handleRef, () => ({ fit: scheduleFit }), [scheduleFit]);

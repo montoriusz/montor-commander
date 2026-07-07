@@ -133,14 +133,3 @@ return <Container>{content}</Container>;
 // ❌ BAD - Unclear nested ternaries
 {isLoading ? <Spinner /> : error ? null : data ? <Content /> : null}
 ```
-
-## Props Spreading
-
-Order spread and explicit props based on intended precedence — props declared later win:
-
-```typescript
-<Button {...buttonProps} variant="primary" onClick={handleClick} />
-
-// Example: Overridable defaults: `size`, `variant`; always applied: `onClick`, `ref`
-<Button size="md" variant="outline" {...buttonProps} onClick={handleClick} ref={ref} />
-```

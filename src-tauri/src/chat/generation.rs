@@ -13,6 +13,9 @@ use crate::jsonl_store::JsonlStore;
 
 const MODEL: &str = "gemini-3.1-flash-lite";
 
+const DEV_SYSTEM_PROMPT_PREFIX: &str =
+    "This application is running in DEV mode. Freely share internals when needed.";
+
 // ---------------------------------------------------------------------------
 // Structured output type
 // ---------------------------------------------------------------------------
@@ -74,7 +77,7 @@ fn response_format() -> ChatResponseFormat {
                 },
                 "commandline": {
                     "type": "string",
-                    "description": "Suggested shell commandline to replace the user's current commandline. Use an empty string when there is no command to suggest."
+                    "description": "Suggested shell commandline to replace the user's current commandline. Use an empty string when there is no modification nor a new command to suggest."
                 }
             },
             "required": ["message", "commandline"],
@@ -100,11 +103,17 @@ fn response_format() -> ChatResponseFormat {
 /// output (`{ "msg": …, "commandline": … }`) to keep history consistent
 /// with the output contract.
 fn build_history(store: &JsonlStore<ChatMessage>, sysinfo: &str) -> Result<ChatRequest, String> {
-    let system = SystemPromptTemplate { sysinfo }
+    let mut system = SystemPromptTemplate { sysinfo }
         .render()
         .map_err(|e| format!("failed to render system prompt: {e}"))?;
+
+    if cfg!(debug_assertions) {
+        system = format!("{DEV_SYSTEM_PROMPT_PREFIX}\n\n{system}", system = system);
+    }
+
     let mut req = ChatRequest::new(vec![]).with_system(system);
 
+    // Read the entire chat history
     let page = store.read(0, None).map_err(|e| e.to_string())?;
 
     // Accumulated `<prompt>/<commandline>/<output>` rendering of the terminal
@@ -193,13 +202,27 @@ fn render_section(section: &ChatMessage) -> String {
     // without an exit code (e.g. terminated by a signal), is rendered
     // `finished="false"` and emits no `exit-code` attribute.
     if !output.is_empty() {
-        let (finished, exit_attr) = match exit_code {
-            Some(code) => ("true", format!(" exit-code=\"{code}\"")),
-            None => ("false", String::new()),
-        };
-        s.push_str(&format!(
-            "\nn<output finished=\"{finished}\"{exit_attr}>\n{output}\n</output>"
-        ));
+        // When emitted, the `<output>` block always sits on its own line after
+        // the `<commandline>` (or `<prompt>` if there was no command); insert one
+        // leading newline separator here. Avoid trailing newlines when there is
+        // no output — keeping the snippet trim for callers downstream of OSC 133 `C`.
+        match exit_code {
+            Some(code) => {
+                s.push('\n');
+                s.push_str(&format!(
+                    "<output finished=\"true\" exit-code=\"{code}\">\n{output}\n</output>"
+                ));
+            }
+            None => {
+                s.push('\n');
+                s.push_str(&format!("<output finished=\"false\">\n{output}\n</output>"));
+            }
+        }
+    } else if !command.is_empty() || executed {
+        // The `<output>` block is separated by a newline. Emit one here after
+        // the `<commandline>` too so the trailing shape is stable on the wire
+        // even when there is no output to render.
+        s.push('\n');
     }
     s
 }
@@ -497,9 +520,9 @@ mod tests {
         // Isolation: each section attaches to the *next* user turn only.
         // Serialized order is system, turn1 (<terminal>ls</terminal><user_message>first),
         // turn2 (<terminal>pwd + live...</terminal><user_message>second).
-        let i_ls = json.find("ls</command>").unwrap();
+        let i_ls = json.find("ls</commandline>").unwrap();
         let i_first = json.find("<user_message>first").unwrap();
-        let i_pwd = json.find("pwd</command>").unwrap();
+        let i_pwd = json.find("pwd</commandline>").unwrap();
         let i_second = json.find("<user_message>second").unwrap();
         assert!(
             i_ls < i_first,
@@ -631,7 +654,7 @@ mod tests {
             .write(ChatMessage::User {
                 id: String::new(),
                 ts: "t".into(),
-                msg: "again".into(),
+                msg: "here again".into(),
             })
             .unwrap();
 
@@ -649,7 +672,7 @@ mod tests {
         // preserved (system, user1, assistant, user2).
         let i_hello = json.find("hello?").unwrap();
         let i_replay = json.find(r#"{\"message\":\"try this\"#).unwrap();
-        let i_again = json.find("again").unwrap();
+        let i_again = json.find("here again").unwrap();
         assert!(
             i_hello < i_replay,
             "user1 should precede the assistant replay"

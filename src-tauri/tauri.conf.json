@@ -10,12 +10,15 @@
     },
     "windows": [
       {
+        "label": "main",
         "decorations": true,
         "fullscreen": false,
-        "height": 600,
+        "height": 546,
         "resizable": true,
         "title": "Montor Commander",
-        "width": 800
+        "width": 1006,
+        "center": true,
+        "visible": false
       }
     ],
     "withGlobalTauri": true
@@ -51,7 +54,9 @@
       "includePrivate": true,
       "projectPath": "./src-tauri",
       "outputPath": "./src/generated",
-      "typeMappings": null,
+      "typeMappings": {
+        "AdapterKind": "\"OpenAI\" | \"OpenAIResp\" | \"Gemini\" | \"Anthropic\" | \"Fireworks\" | \"Together\" | \"Groq\" | \"Aihubmix\" | \"Mimo\" | \"Moonshot\" | \"Nebius\" | \"Xai\" | \"DeepSeek\" | \"Zai\" | \"BigModel\" | \"Aliyun\" | \"Baidu\" | \"Cohere\" | \"Ollama\" | \"OllamaCloud\" | \"Vertex\" | \"GithubCopilot\" | \"OpenCodeGo\" | \"BedrockApi\" | \"OpenRouter\" | \"MiniMax\""
+      },
       "validationLibrary": "none",
       "verbose": true,
       "visualizeDeps": false

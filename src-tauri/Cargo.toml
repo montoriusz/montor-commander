@@ -30,6 +30,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tauri-plugin-opener = "2"
 vt100 = "0.16"
+uuid = { version = "1", features = ["v4"] }
+keyring = "3"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

@@ -108,6 +108,18 @@ export const commandlineSuggestion = defineSlotRecipe({
           },
         },
       },
+      false: {
+        command: {
+          translate: '0 5px',
+          // transitionProperty: 'translate',
+          // transitionDuration: '0.5s',
+          // transitionTimingFunction: 'step-start',
+          // _open: {
+          //   translate: '0 0',
+          //   // transitionTimingFunction: 'step-end',
+          // },
+        },
+      },
     },
   },
   staticCss: ['*'],

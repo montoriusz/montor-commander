@@ -38,7 +38,7 @@ export default defineConfig({
   strictTokens: true,
 
   staticCss: {
-    themes: ['dark'],
+    themes: ['dark', 'light'],
   },
 
   // The following fragment is meant to be updated by the Park UI CLI,

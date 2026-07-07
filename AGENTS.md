@@ -26,15 +26,18 @@ A Tauri 2 desktop terminal app. The frontend is TypeScript + Vite using xterm.js
 Uses pnpm.
 
 - `pnpm install` — install dependencies.
-- `pnpm tauri dev` — run the app in development.
+- `pnpm typecheck` — run Typescript type checker.
+- `pnpm lint` — run the linter (Biome).
 - `pnpm build` — type-check and build the frontend (`tsc && vite build`).
 - `pnpm tauri build` — build the desktop app.
-- `pnpm tauri-typegen` — regenerate Tauri type bindings.
+- `pnpm tauri-typegen` — regenerate Tauri type bindings (see **tauri-typegen** skill before using)
 
 ## Conventions
 
 - Save Implementation plans in `implementation-plans/`.
 - Frontend is TypeScript + React; keep `tsc` passing.
+- Tanstack Query for simple data fetching and caching.
+- For backend-synced and other stores use Zustand.
 - xterm.js for used as a terminal emulator.
 - There is an assistant chat next to the terminal.
 - Do not edit generated files in `src/generated/`; regenerate them instead.

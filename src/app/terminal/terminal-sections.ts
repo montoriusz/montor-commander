@@ -9,6 +9,7 @@ type MarkingPoint = 'PromptStart' | 'PromptEnd' | 'CommandStarted' | 'CommandFin
 
 interface Section {
   id: string;
+  isDisposed: boolean;
   markers: Record<MarkingPoint, BufferMarker | undefined>;
   decoration: IDecoration | undefined;
   commmandDecorations: IDecoration[];
@@ -56,6 +57,12 @@ export class TerminalSections implements ITerminalAddon {
     this.oscHook?.dispose();
   }
 
+  isSectionAvailable(sectionId: string): boolean {
+    const section = this.sectionsByAid.get(sectionId);
+    if (!section) return false;
+    return !section.isDisposed;
+  }
+
   getLastSectionId(): string | undefined {
     return this.lastAid;
   }
@@ -67,35 +74,24 @@ export class TerminalSections implements ITerminalAddon {
     return sectionIdx !== -1 ? this.sections[sectionIdx]?.id : undefined;
   }
 
-  /** @deprecated */
-  getSectionShapshots(startAid: string | undefined): SectionSnapshot[] {
-    if (!this.terminal) return [];
-
-    const section = startAid !== undefined ? this.sectionsByAid.get(startAid) : undefined;
-    const startIdx = section !== undefined ? this.sections.indexOf(section) : 0;
-
-    const sections = [];
-    for (const section of this.sections.slice(startIdx)) {
-      if (section.markers.PromptStart === undefined) continue;
-      sections.push({
-        id: section.id,
-        prompt: this.readFragment(section.markers.PromptStart!, section.markers.PromptEnd),
-        command: section.markers.PromptEnd
-          ? this.readFragment(section.markers.PromptEnd, section.markers.CommandStarted)
-          : undefined,
-        output: section.markers.CommandStarted
-          ? this.readFragment(section.markers.CommandStarted, section.markers.CommandFinished)
-          : undefined,
-      });
-    }
-
-    return sections;
-  }
-
   scrollToSection(sectionId: string) {
     const section = this.sectionsByAid.get(sectionId);
     if (!section || !this.terminal) return;
     this.terminal.scrollToLine(section.markers.PromptStart?.y ?? 0);
+  }
+
+  scrollToSectionEnd(sectionId: string) {
+    const section = this.sectionsByAid.get(sectionId);
+    if (!section || section.isDisposed || !this.terminal) return;
+    const sectionIdx = this.sections.indexOf(section);
+    const nextSection = this.sections[sectionIdx + 1];
+    if (!nextSection?.markers.PromptStart) {
+      this.terminal.scrollToBottom();
+      return;
+    }
+    this.terminal.scrollToLine(
+      Math.max(0, nextSection.markers.PromptStart.y - this.terminal.rows + 5),
+    );
   }
 
   private orderSection(section: Section) {
@@ -128,7 +124,7 @@ export class TerminalSections implements ITerminalAddon {
     this.sections.splice(targetIdx, 0, section);
   }
 
-  private registerMarkingPoint(markingPoint: MarkingPoint, aid?: string) {
+  private registerMarkingPoint(markingPoint: MarkingPoint, aid: string | undefined) {
     if (!this.terminal) return;
 
     const effectiveAid = aid || this.lastAid;
@@ -149,29 +145,6 @@ export class TerminalSections implements ITerminalAddon {
     this.orderSection(section);
     updateSectionDecorations(this.terminal, section);
   }
-
-  /** @deprecated */
-  private readFragment(start: BufferMarker, end?: BufferMarker): string {
-    const buffer = this.terminal!.buffer.normal;
-    const endY = end?.y ?? buffer.length - 1;
-    const endX = end?.x;
-    let result = '';
-    for (let y = start.y; y <= endY; y++) {
-      const line = buffer.getLine(y);
-      const lineStr = line?.translateToString();
-      if (!lineStr) continue;
-
-      const begin = y === start.y ? start.x : 0;
-      const end = y === endY && endX !== undefined ? endX : undefined;
-
-      if (!line?.isWrapped) {
-        result += '\n';
-      }
-      result += lineStr.slice(begin, end);
-    }
-
-    return result.trim();
-  }
 }
 
 function createSection(id: string): Section {
@@ -185,6 +158,7 @@ function createSection(id: string): Section {
     },
     decoration: undefined,
     commmandDecorations: [],
+    isDisposed: false,
   };
 }
 
@@ -228,11 +202,18 @@ function updatePromptDecoration(term: Terminal, section: Section) {
   // Check if markers are available
   if (!section.markers.CommandFinished) return;
 
+  section.isDisposed = false;
+
   const activeBuffer = term.buffer.active;
 
   const y = section.markers.CommandFinished.y;
+
   const marker = term.registerMarker(y - activeBuffer.cursorY - activeBuffer.baseY);
   if (!marker) return;
+
+  marker.onDispose(() => {
+    section.isDisposed = true;
+  });
 
   const decoration = term.registerDecoration({
     marker,

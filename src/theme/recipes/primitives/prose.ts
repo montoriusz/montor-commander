@@ -3,7 +3,14 @@ import { defineRecipe } from '@pandacss/dev';
 export const prose = defineRecipe({
   className: 'prose',
   base: {
+    paddingY: '2',
+
     lineHeight: '1.45',
+
+    // Drop the trailing bottom margin of the last child so `.prose` blocks
+    // sit flush with whatever follows them.
+    '& > :first-child': { marginTop: '0' },
+    '& > :last-child': { marginBottom: '0' },
 
     '& h1, & h2, & h3, & h4, & h5, & h6': {
       color: '{colors.fg.default}',

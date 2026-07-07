@@ -2,6 +2,8 @@ import { useSyncExternalStore } from 'react';
 import type { ChatMessage } from '@/generated';
 import { chatStore } from './chat-store';
 
+// TODO: refactor to Zustand
+
 export function useChat() {
   const state = useSyncExternalStore(chatStore.subscribe, chatStore.getSnapshot);
 

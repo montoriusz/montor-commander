@@ -9,6 +9,7 @@
   - On demand or always on (Guardian mode).
   - Potential loss rating indicator.
 - Extract CWD to `cwd` attribute of `<prompt>`.
+- Assistant side channel for skipping standard output to avoid flooding or obscuring the terminal.
 - Tools:
   - Shell command discovery tools.
   - Silent filesystem traversal, file reading, and other safe read-only tools (keeping terminal space for critical operations only).
@@ -29,4 +30,4 @@
 ## Known Issues
 
 - Processes don't exit cleanly
--
+- Fix command decorations after buffer overflow

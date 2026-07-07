@@ -18,7 +18,7 @@ export interface CommandlineSuggestionProps extends CommandlineSuggestionVariant
   onAction?: (event: CommandlineSuggestionAction) => void;
 }
 
-const COLLAPSED_HEIGHT = '2.4em';
+const COLLAPSED_HEIGHT = '2.375rem'; // Buttons height + Buttons padding - Command padding
 
 export function CommandlineSuggestion({
   status,
@@ -54,7 +54,7 @@ export function CommandlineSuggestion({
 
   const styles = commandlineSuggestion({
     ...props,
-    hasMore: !open && hasMore,
+    hasMore: hasMore && !open,
   });
   let statusStyle = css({ colorPalette: 'blue' });
   if (status === 'pending') statusStyle = css({ colorPalette: 'amber' });

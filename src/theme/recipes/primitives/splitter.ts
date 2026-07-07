@@ -7,7 +7,7 @@ export const splitter = defineSlotRecipe({
   base: {
     root: {
       display: 'flex',
-      gap: '1',
+      gap: '0.5',
     },
     panel: {
       borderRadius: 'l3',
@@ -58,13 +58,13 @@ export const splitter = defineSlotRecipe({
     variant: {
       full: {
         root: {
-          gap: '0',
-          // background: 'gray.4',
+          gap: '1px',
+          bg: 'surface',
+          p: '1',
         },
         panel: {
           p: '0',
           background: 'transparent',
-          borderRadius: '0',
         },
       },
     },

@@ -1,20 +1,25 @@
 'use client';
 
-import { Play, Terminal, X } from 'lucide-react';
+import { Play, Terminal, Undo2Icon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { css, cx } from 'styled-system/css';
 import {
   type CommandlineSuggestionVariantProps,
   commandlineSuggestion,
 } from 'styled-system/recipes';
+import type { SuggestionExecutionStatus } from '@/app/chat/use-suggestion-execution-status';
+import {
+  CLASS_CMD_SUGGESTION,
+  DATA_ATTR_TERM_BLOCK,
+} from '@/app/shared/section-matching-dom-attributes';
 import { Collapsible, IconButton } from '../primitives';
 
 export type CommandlineSuggestionAction = 'execute' | 'put' | 'reject';
 
 export interface CommandlineSuggestionProps extends CommandlineSuggestionVariantProps {
   commandline: string;
-  suggestionId?: string;
-  status?: 'pending' | 'accepted' | 'failed' | 'rejected';
+  termBlockId?: string;
+  status?: SuggestionExecutionStatus['status'];
   onAction?: (event: CommandlineSuggestionAction) => void;
 }
 
@@ -23,7 +28,7 @@ const COLLAPSED_HEIGHT = '2.375rem'; // Buttons height + Buttons padding - Comma
 export function CommandlineSuggestion({
   status,
   commandline,
-  suggestionId,
+  termBlockId,
   onAction,
   ...props
 }: CommandlineSuggestionProps) {
@@ -72,7 +77,10 @@ export function CommandlineSuggestion({
   );
 
   return (
-    <div className={cx(styles.root, statusStyle)} data-suggestion-id={suggestionId}>
+    <div
+      className={cx(styles.root, statusStyle, CLASS_CMD_SUGGESTION)}
+      {...{ [DATA_ATTR_TERM_BLOCK]: termBlockId }}
+    >
       <Collapsible.Root
         ref={rootRef}
         variant="command"
@@ -108,7 +116,7 @@ export function CommandlineSuggestion({
             size="xs"
             onClick={handlers.onReject}
           >
-            <X />
+            <Undo2Icon />
           </IconButton>
         ) : (
           <IconButton title="Send to terminal" variant="subtle" size="xs" onClick={handlers.onPut}>

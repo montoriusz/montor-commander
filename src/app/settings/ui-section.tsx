@@ -8,7 +8,7 @@
  */
 import { yupResolver } from '@hookform/resolvers/yup';
 import { useForm } from 'react-hook-form';
-import { Flex, Grid, GridItem, VStack } from 'styled-system/jsx';
+import { Flex, VStack } from 'styled-system/jsx';
 import { formatInvokeError } from '@/app/shared/invoke-error.helpers';
 import { useSettingsFormStatusSync } from '@/app/shared/settings-form-status-store';
 import { useSettingsSlice } from '@/app/shared/settings-store';

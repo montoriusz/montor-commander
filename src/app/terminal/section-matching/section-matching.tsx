@@ -2,6 +2,14 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { css } from 'styled-system/css';
 import { sectionConnector } from 'styled-system/recipes';
 import { token } from 'styled-system/tokens';
+import {
+  CLASS_CHAT_MESSAGE,
+  CLASS_CMD_SUGGESTION,
+  CLASS_TERM_BLOCK,
+  CLASS_TERM_CMD,
+  DATA_ATTR_TERM_BLOCK,
+  DATASET_TERM_BLOCK,
+} from '@/app/shared/section-matching-dom-attributes';
 import { useDebouncedCallback } from '@/app/shared/use-debounced-callback';
 import { UpdateMatchingContext } from './context';
 
@@ -33,41 +41,40 @@ export function SectionMatching() {
 
     const svgRect = svg.getBoundingClientRect();
 
-    const termElements = container.querySelectorAll<HTMLElement>('[data-sect-id]');
+    const termElements = container.querySelectorAll<HTMLElement>(
+      `.${CLASS_TERM_BLOCK}[${DATA_ATTR_TERM_BLOCK}]`,
+    );
     const termBySection = new Map<string, HTMLElement>();
     for (const termEl of termElements) {
-      const sectId = termEl.dataset.sectId;
+      const sectId = termEl.dataset[DATASET_TERM_BLOCK];
       if (sectId) termBySection.set(sectId, termEl);
       termEl.classList.remove(connectorStyle);
     }
 
-    const chatElements = container.querySelectorAll<HTMLElement>('[data-term-sect-id]');
+    const cmdElements = container.querySelectorAll<HTMLElement>(
+      `.${CLASS_TERM_CMD}[${DATA_ATTR_TERM_BLOCK}]`,
+    );
+    const cmdBySection = new Map<string, HTMLElement>();
+    for (const cmdEl of cmdElements) {
+      const sectId = cmdEl.dataset[DATASET_TERM_BLOCK];
+      if (sectId) cmdBySection.set(sectId, cmdEl);
+      cmdEl.classList.remove(connectorStyle);
+    }
+
+    const chatElements = container.querySelectorAll<HTMLElement>(
+      `.${CLASS_CHAT_MESSAGE}[${DATA_ATTR_TERM_BLOCK}]`,
+    );
+
+    const cmdSuggElements = container.querySelectorAll<HTMLElement>(
+      `.${CLASS_CMD_SUGGESTION}[${DATA_ATTR_TERM_BLOCK}]`,
+    );
 
     const next: Connection[] = [];
-    for (const chatEl of chatElements) {
-      const sectId = chatEl.dataset.termSectId;
-      if (!sectId) continue;
 
-      const termEl = termBySection.get(sectId);
-      if (!termEl) continue;
+    addConnections(next, svgRect, termBySection, chatElements, 'cn');
+    addConnections(next, svgRect, cmdBySection, cmdSuggElements, 'cn-cmd');
 
-      const termRect = termEl.getBoundingClientRect();
-      const startX = termRect.right - svgRect.left + 1;
-      const termY = termRect.top - svgRect.top + 1;
-
-      if (termY < 0 || termY > svgRect.height) continue;
-
-      const chatRect = chatEl.getBoundingClientRect();
-      const endX = chatRect.left - svgRect.left - 1;
-      const chatY = chatRect.top - svgRect.top + 1;
-      next.push({
-        id: `cn:${sectId}`,
-        d: buildPath(startX, endX, termY, chatY),
-      });
-
-      termEl.classList.add(connectorStyle);
-      console.log('add', next.at(-1));
-    }
+    console.log('connections', next, chatElements, cmdSuggElements, termElements);
 
     setConnections(next);
   }, []);
@@ -98,6 +105,38 @@ export function SectionMatching() {
       {paths}
     </svg>
   );
+}
+
+function addConnections(
+  out: Connection[],
+  svgRect: DOMRect,
+  sourceBySection: ReadonlyMap<string, HTMLElement>,
+  targets: Iterable<HTMLElement>,
+  idPrefix: string,
+): void {
+  for (const targetEl of targets) {
+    const sectId = targetEl.dataset[DATASET_TERM_BLOCK];
+    if (!sectId) continue;
+
+    const sourceEl = sourceBySection.get(sectId);
+    if (!sourceEl) continue;
+
+    const sourceRect = sourceEl.getBoundingClientRect();
+    const startX = sourceRect.right - svgRect.left + 1;
+    const sourceY = sourceRect.top - svgRect.top + 1;
+
+    if (sourceY < 0 || sourceY > svgRect.height) continue;
+
+    const targetRect = targetEl.getBoundingClientRect();
+    const endX = targetRect.left - svgRect.left - 1;
+    const targetY = targetRect.top - svgRect.top + 1;
+    out.push({
+      id: `${idPrefix}:${sectId}`,
+      d: buildPath(startX, endX, sourceY, targetY),
+    });
+
+    sourceEl.classList.add(connectorStyle);
+  }
 }
 
 export function useUpdateMatchingListener(callback: () => void): void {

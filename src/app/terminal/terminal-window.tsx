@@ -6,7 +6,7 @@ import { type TerminalHandle, TerminalPane } from '../terminal';
 import { SectionMatching, UpdateMatchingProvider, useEmitUpdateMatching } from './section-matching';
 
 const PANELS: Splitter.PanelData[] = [
-  { id: 'terminal', minSize: '40rem' },
+  { id: 'terminal', minSize: '30rem' },
   { id: 'chat', minSize: '18rem', maxSize: '50%' },
 ];
 

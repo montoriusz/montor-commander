@@ -1,4 +1,9 @@
 import type { IDecoration, IDisposable, ITerminalAddon, Terminal } from '@xterm/xterm';
+import {
+  CLASS_TERM_BLOCK,
+  CLASS_TERM_CMD,
+  DATASET_TERM_BLOCK,
+} from '../shared/section-matching-dom-attributes';
 
 interface BufferMarker {
   x: number;
@@ -228,7 +233,9 @@ function updatePromptDecoration(term: Terminal, section: Section) {
     decoration.onRender((element: HTMLElement) => {
       // TODO: move to recipe
       element.style.width = 'calc(100% - 5rem)';
-      element.dataset.sectId = section.id;
+
+      element.classList.add(CLASS_TERM_BLOCK);
+      element.dataset[DATASET_TERM_BLOCK] = section.id;
     });
     decoration.onDispose(() => {
       decoration.marker.dispose();
@@ -259,6 +266,7 @@ function updateCommandDecorations(term: Terminal, section: Section) {
   if (startY > endY) return;
 
   const activeBuffer = term.buffer.active;
+  let isFirstLine = true;
   for (let y = startY; y <= endY; y++) {
     const x = y === startY ? startX : 0;
     const width = term.cols - x;
@@ -281,6 +289,13 @@ function updateCommandDecorations(term: Terminal, section: Section) {
 
     if (decoration) {
       section.commmandDecorations.push(decoration);
+      if (isFirstLine) {
+        decoration.onRender((element) => {
+          element.classList.add(CLASS_TERM_CMD);
+          element.dataset[DATASET_TERM_BLOCK] = section.id;
+        });
+        isFirstLine = false;
+      }
       decoration.onDispose(() => {
         decoration.marker.dispose();
         const idx = section.commmandDecorations.indexOf(decoration);

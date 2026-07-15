@@ -1,6 +1,6 @@
 import { ArrowUp, Settings } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { css } from 'styled-system/css';
+import { css, cx } from 'styled-system/css';
 import { Box, Flex, styled, VStack } from 'styled-system/jsx';
 import { sectionConnector } from 'styled-system/recipes';
 import type { ChatMessage } from '@/generated';
@@ -11,30 +11,33 @@ import {
 import { Markdown } from '@/ui/composites/markdown';
 import { IconButton, RelativeTime, SkeletonText, Spinner, Textarea } from '@/ui/primitives';
 import * as ScrollArea from '@/ui/primitives/scroll-area';
+import {
+  CLASS_CHAT_MESSAGE,
+  DATA_ATTR_TERM_BLOCK,
+  DATASET_TERM_BLOCK,
+} from '../shared/section-matching-dom-attributes';
 import { commandlineController, terminal, terminalSections } from '../terminal';
 import { useEmitUpdateMatching } from '../terminal/section-matching';
 import { windowManager } from '../window-manager';
 import { useChat } from './use-chat';
+import {
+  type SuggestionExecutionStatus,
+  useSuggestionExecutionStatus,
+} from './use-suggestion-execution-status';
 
 interface MessageBubbleProps {
   msg: ChatMessage;
-  isCurrentSection: boolean;
-  onSuggestionAction: (event: CommandlineSuggestionAction, commandline: string) => void;
+  onSuggestionAction: (msgId: string, event: CommandlineSuggestionAction) => void;
+  suggestionStatus: SuggestionExecutionStatus | undefined;
 }
 
 const RESIZE_DEBOUNCE_TIME = 300;
 
-function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBubbleProps) {
+function MessageBubble({ msg, onSuggestionAction, suggestionStatus }: MessageBubbleProps) {
   const isUser = msg.type === 'User';
-  // `cmdline` exists only on User/Assistant; null for TerminalSection so the
-  // suggestion action is a no-op for those (which render nothing anyway).
-  const cmdline = msg.type === 'Assistant' ? msg.cmdline : null;
   const actionHandler = useCallback(
-    (event: CommandlineSuggestionAction) => {
-      if (!cmdline) return;
-      onSuggestionAction(event, cmdline);
-    },
-    [cmdline, onSuggestionAction],
+    (event: CommandlineSuggestionAction) => onSuggestionAction(msg.id, event),
+    [onSuggestionAction, msg.id],
   );
 
   // TerminalSection messages carry buffer content for re-render into a separate
@@ -60,8 +63,8 @@ function MessageBubble({ msg, isCurrentSection, onSuggestionAction }: MessageBub
           <Markdown content={msg.msg} />
           {!isUser && msg.cmdline && (
             <CommandlineSuggestion
-              status={isCurrentSection ? 'pending' : undefined}
-              suggestionId={msg.id}
+              status={suggestionStatus?.status ?? 'pending'}
+              termBlockId={suggestionStatus?.termBlockId}
               commandline={msg.cmdline}
               onAction={actionHandler}
             />
@@ -159,21 +162,30 @@ export function ChatPane() {
     [handleSubmit],
   );
 
+  const { getStatus: getSuggestionStatus, updateHotStatus: updateSuggestionStatus } =
+    useSuggestionExecutionStatus(messages);
+
   const suggestionActionHandler = useCallback(
-    (event: CommandlineSuggestionAction, command: string) => {
-      if (event === 'reject') {
-        const lastUserCommandline = 'todo';
-        commandlineController.put(lastUserCommandline);
-      } else if (!command) {
+    (msgId: string, action: CommandlineSuggestionAction) => {
+      const suggestion = getSuggestionStatus(msgId);
+      if (!suggestion) return;
+
+      const { cmdline, prevUserCmdline } = suggestion;
+
+      if (action === 'reject') {
+        commandlineController.put(prevUserCmdline);
+        updateSuggestionStatus(msgId, 'rejected');
+      } else if (!cmdline) {
         return;
-      } else if (event === 'execute') {
-        commandlineController.putAndExecute(command);
-      } else if (event === 'put') {
-        commandlineController.put(command);
+      } else if (action === 'execute') {
+        commandlineController.putAndExecute(cmdline);
+        updateSuggestionStatus(msgId, 'accepted');
+      } else if (action === 'put') {
+        commandlineController.put(cmdline);
         terminal.focus();
       }
     },
-    [],
+    [getSuggestionStatus, updateSuggestionStatus],
   );
 
   let lastTerminalStartSectionId: string | null = null;
@@ -217,24 +229,30 @@ export function ChatPane() {
           <ScrollArea.Viewport ref={viewportRef} py="1" pr="3" pl="4">
             {messages.map((msg) => {
               const sectionBoundary = getTerminalSectionBounds(msg);
+              const suggestionStatus =
+                msg.type === 'Assistant' ? getSuggestionStatus(msg.id) : undefined;
+
               return (
                 <Fragment key={msg.id}>
                   {sectionBoundary && (
                     <styled.button
                       type="button"
                       onClick={connectorClickHandler}
-                      className={sectionConnector({
-                        separator: true,
-                      })}
+                      className={cx(
+                        CLASS_CHAT_MESSAGE,
+                        sectionConnector({
+                          separator: true,
+                        }),
+                      )}
                       disabled={!isSectionConnectorActive(sectionBoundary[1])}
-                      data-term-sect-id={sectionBoundary[1]}
+                      {...{ [DATA_ATTR_TERM_BLOCK]: sectionBoundary[1] }}
                     />
                   )}
                   <MessageBubble
                     key={msg.id}
                     msg={msg}
+                    suggestionStatus={suggestionStatus}
                     onSuggestionAction={suggestionActionHandler}
-                    isCurrentSection={false}
                   />
                 </Fragment>
               );
@@ -285,7 +303,7 @@ export function ChatPane() {
 
 const connectorClickHandler = (e: React.MouseEvent) => {
   const target = e.target as HTMLElement;
-  const sectionId = target.getAttribute('data-term-sect-id');
+  const sectionId = target.dataset[DATASET_TERM_BLOCK];
   if (sectionId) {
     terminalSections.scrollToSectionEnd(sectionId);
   }

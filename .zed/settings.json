@@ -7,9 +7,11 @@
   "language_servers": [
     "prettier",
     "biome",
+    "tsgo",
     "!eslint",
     "!tailwindcss-language-server",
     "!typescript-language-server",
+    "!vtsls",
     "...",
   ],
   "languages": {

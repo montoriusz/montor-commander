@@ -19,7 +19,11 @@
     "rules": {
       "recommended": true,
       "style": {
-        "noNonNullAssertion": "off"
+        "noNonNullAssertion": "off",
+        "useConst": {
+          "fix": "none",
+          "level": "warn"
+        }
       },
       "suspicious": {
         "noEmptyInterface": "off"

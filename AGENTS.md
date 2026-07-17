@@ -4,18 +4,16 @@
 
 A Tauri 2 desktop terminal app. The frontend is TypeScript + Vite using xterm.js; the backend is Rust in `src-tauri`.
 
+**IMPORTANT**: If you find any discrepancies between this document and the actual codebase, always flag them to the user.
+
 ## Layout
 
 - `src/` — frontend TypeScript + React, with generated Tauri bindings in `src/generated/`.
-  - `src/app/` — app components (`app.tsx`) and hooks (`use-terminal.ts`, `terminal-sections.ts`).
-  - `ui/` - Pure UI components, isolated from business logic.
+  - `src/app/` — app components and feature logic, grouped by domain into `chat/`, `terminal/`, `settings/`, and `shared/` (plus top-level `window-manager.tsx`, `window-manager-builder.tsx`, `providers.tsx`).
+  - `src/ui/` - Pure UI components, isolated from business logic.
     - `primitives/` - Panda CSS / Ark UI primitive components.
     - `composites/` - Composites and domain-specific components.
-    - `layouts/` - Generic slot-based containers for pages and their sections.
-    - `hooks/` - UI component companion hooks, isolated from business logic.
-  - `stories/` - Storybook stories for UI components, mock-ups and other examples.
-  - `theme/` + `panda.config.ts` - Panda CSS theme configuration.
-  - `src/theme/` — Panda CSS theme configuration.
+  - `src/theme/` + `panda.config.ts` (project root) - Panda CSS theme configuration.
   - `src/main.tsx` — React entry point.
 - `src-tauri/` — Rust backend (`src/`, `Cargo.toml`, `tauri.conf.json`).
   - `src-tauri/src/chat/` — chat backend; `generation.rs` owns all `genai` LLM calls.
@@ -26,15 +24,16 @@ A Tauri 2 desktop terminal app. The frontend is TypeScript + Vite using xterm.js
 Uses pnpm.
 
 - `pnpm install` — install dependencies.
-- `pnpm typecheck` — run Typescript type checker.
-- `pnpm lint` — run the linter (Biome).
+- `pnpm typecheck` — run the TypeScript type checker (`tsc --noEmit`).
+- `pnpm lint:check` run Biome read-only check.
+- `pnpm lint` — run Biome with autofix (`biome check --write`).
 - `pnpm build` — type-check and build the frontend (`tsc && vite build`).
-- `pnpm tauri build` — build the desktop app.
+- `pnpm tauri build` — build the desktop app (via the `tauri` CLI passthrough script).
 - `pnpm tauri-typegen` — regenerate Tauri type bindings (see **tauri-typegen** skill before using)
 
 ## Conventions
 
-- Save Implementation plans in `implementation-plans/`.
+- Save implementation plans in the project-root `implementation-plans/` directory.
 - Frontend is TypeScript + React; keep `tsc` passing.
 - Tanstack Query for simple data fetching and caching.
 - For backend-synced and other stores use Zustand.

@@ -239,11 +239,11 @@ fn render_section(section: &ChatMessage) -> String {
 ///
 /// Returns the new message ID on success.
 pub(crate) async fn generate_assistant_reply(
-    client: &genai::Client,
     store: &JsonlStore<ChatMessage>,
     now_ts: &str,
     sysinfo: &str,
 ) -> Result<u32, String> {
+    let client = genai::Client::builder().build();
     let req = build_history(store, sysinfo)?;
 
     // Log the serialized `ChatRequest` (system prompt + all formatted turns) at

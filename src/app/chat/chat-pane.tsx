@@ -269,7 +269,7 @@ export function ChatPane() {
         </ScrollArea.Root>
 
         {error && (
-          <Box px="3" py="1" color="red.4">
+          <Box px="3" py="1" color="error">
             {error}
           </Box>
         )}

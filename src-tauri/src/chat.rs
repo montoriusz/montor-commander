@@ -315,7 +315,6 @@ pub async fn send_chat_message(
     // Capture what the spawned task needs, then release the State borrow.
     let generating = session.generating.clone();
     let shell = Arc::clone(&session.shell);
-    let client = genai::Client::builder().build();
 
     tauri::async_runtime::spawn(async move {
         let ts = now_timestamp();
@@ -330,7 +329,7 @@ pub async fn send_chat_message(
             .await
             .unwrap_or_default();
 
-        match generation::generate_assistant_reply(&client, &store, &ts, &sysinfo).await {
+        match generation::generate_assistant_reply(&store, &ts, &sysinfo).await {
             Ok(assistant_id) => {
                 emit_messages_changed(&app, assistant_id.to_string());
             }

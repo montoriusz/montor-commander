@@ -9,7 +9,7 @@ import {
   type CommandlineSuggestionAction,
 } from '@/ui/composites/commandline-suggestion';
 import { Markdown } from '@/ui/composites/markdown';
-import { IconButton, RelativeTime, SkeletonText, Spinner, Textarea } from '@/ui/primitives';
+import { IconButton, RelativeTime, SkeletonText, Spinner, TextareaSlot } from '@/ui/primitives';
 import * as ScrollArea from '@/ui/primitives/scroll-area';
 import {
   CLASS_CHAT_MESSAGE,
@@ -19,6 +19,7 @@ import {
 import { commandlineController, terminal, terminalSections } from '../terminal';
 import { useEmitUpdateMatching } from '../terminal/section-matching';
 import { windowManager } from '../window-manager';
+import { ModelMenu } from './model-menu';
 import { useChat } from './use-chat';
 import {
   type SuggestionExecutionStatus,
@@ -84,7 +85,7 @@ function MessageBubble({ msg, onSuggestionAction, suggestionStatus }: MessageBub
 export function ChatPane() {
   const emitUpdateMatchingRef = useRef<() => void>(null);
   emitUpdateMatchingRef.current = useEmitUpdateMatching();
-  const { messages, isGenerating, error, send } = useChat();
+  const { messages, isGenerating, error, selectedModel, send } = useChat();
   const [input, setInput] = useState('');
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -274,28 +275,30 @@ export function ChatPane() {
           </Box>
         )}
 
-        <Flex p="2" position="relative">
-          <Textarea
-            autoresize
-            placeholder="Message the assistant"
-            flex="1"
-            maxH="40"
-            pr="12"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-          <IconButton
-            borderRadius="full"
-            position="absolute"
-            right="4"
-            bottom="4"
-            disabled={isGenerating || !input.trim()}
-            onClick={handleSubmit}
-          >
-            <ArrowUp />
-          </IconButton>
-        </Flex>
+        <Box p="2">
+          <TextareaSlot.Root>
+            <TextareaSlot.Input
+              autoresize
+              placeholder="Message the assistant"
+              maxH="40"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+            <TextareaSlot.Footer justifyContent="end">
+              <ModelMenu />
+              <IconButton
+                size="xs"
+                borderRadius="full"
+                disabled={!selectedModel || isGenerating || !input.trim()}
+                title={!selectedModel ? 'Select a model first' : 'Send message'}
+                onClick={handleSubmit}
+              >
+                <ArrowUp />
+              </IconButton>
+            </TextareaSlot.Footer>
+          </TextareaSlot.Root>
+        </Box>
       </Flex>
     </Flex>
   );

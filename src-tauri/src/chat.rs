@@ -198,7 +198,6 @@ impl ChatSession {
 // ---------------------------------------------------------------------------
 // Tauri commands
 // ---------------------------------------------------------------------------
-
 #[tauri::command]
 pub fn get_chat_session(session: State<'_, ChatSession>) -> Result<ChatSessionInfo, String> {
     Ok(ChatSessionInfo {
@@ -234,9 +233,11 @@ pub fn read_chat_messages(
 #[tauri::command]
 pub async fn send_chat_message(
     msg: String,
+    model: String,
     app: AppHandle,
     terminal: State<'_, TerminalSession>,
     session: State<'_, ChatSession>,
+    settings: State<'_, crate::settings::SettingsState>,
 ) -> Result<(), String> {
     // Reject if already generating.
     if session
@@ -312,6 +313,21 @@ pub async fn send_chat_message(
 
     emit_messages_changed(&app, user_id);
 
+    // Resolve the selected model against the configured providers before
+    // spawning — `SettingsState::resolve_model` returns an owned, `Send`
+    // descriptor (no `MutexGuard` crosses the `.await`), which is then moved
+    // into the spawned task alongside the store/timestamp/sysinfo.
+    let resolved_model = match settings.resolve_model(&model) {
+        Ok(m) => m,
+        Err(e) => {
+            session.generating.store(false, Ordering::SeqCst);
+            // Surface the resolution failure through the same channel as a
+            // generation error so the chat pane shows it.
+            emit_generation_error(&app, e);
+            return Ok(());
+        }
+    };
+
     // Capture what the spawned task needs, then release the State borrow.
     let generating = session.generating.clone();
     let shell = Arc::clone(&session.shell);
@@ -329,7 +345,7 @@ pub async fn send_chat_message(
             .await
             .unwrap_or_default();
 
-        match generation::generate_assistant_reply(&store, &ts, &sysinfo).await {
+        match generation::generate_assistant_reply(&store, &ts, &sysinfo, &resolved_model).await {
             Ok(assistant_id) => {
                 emit_messages_changed(&app, assistant_id.to_string());
             }

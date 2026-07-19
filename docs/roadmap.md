@@ -3,8 +3,6 @@
 ## Features
 
 - Terminal-chat view modes: Balloons, Split-view, Notebook.
-- Switch between different LLM models and providers
-- UI options — colors and fonts (scope TBD: theme presets vs. full custom theming, automatic system colors theme).
 - Command-line guard — context-independent, security-focused review of LLM-suggested and user-entered commands:
   - On demand or always on (Guardian mode).
   - Potential loss rating indicator.

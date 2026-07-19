@@ -134,6 +134,90 @@ pub struct ProviderMeta {
 }
 
 // ---------------------------------------------------------------------------
+// Resolved model (selected-model → genai inputs)
+// ---------------------------------------------------------------------------
+
+/// A model selected for generation, resolved from a [`Settings`] provider list
+/// against a model alias (bare name for a primary provider, or
+/// `{provider_alias}::{model_name}` otherwise).
+///
+/// Carries everything `generation` needs to build a `genai::Client` and a
+/// `ChatOptions` — the real `model_name` (alias prefix stripped), the adapter
+/// `kind`, the optional custom `base_url`, the optional keychain-backed
+/// `api_key` (set when the user provided a key; `None` lets genai fall back to
+/// the adapter's default env-var lookup), and the per-model token caps.
+///
+/// Owned and `Send`, so it can move across the `.await` boundary in
+/// `send_chat_message`'s spawned task.
+#[derive(Debug, Clone)]
+pub struct ResolvedModel {
+    /// Echoed into the assistant message's `model` field for traceability.
+    pub alias: String,
+    pub kind: AdapterKind,
+    /// Real model name sent to genai (the `namespace::` prefix is stripped).
+    pub model_name: String,
+    pub base_url: Option<String>,
+    /// Keychain key, when the user set one. `None` => genai env-var fallback.
+    pub api_key: Option<String>,
+    pub max_tokens: Option<u32>,
+    pub max_output_tokens: Option<u32>,
+}
+
+/// Split `alias` on the first `::` into `(namespace, name)`, returning
+/// `None` for the namespace when there isn't one (the primary-provider case).
+fn split_alias(alias: &str) -> (Option<&str>, &str) {
+    match alias.split_once("::") {
+        Some((ns, name)) => (Some(ns), name),
+        None => (None, alias),
+    }
+}
+
+/// Resolve a model alias against the configured providers.
+///
+/// - `alias = None` (no selection): pick the default — the first enabled
+///   primary provider's first model, else the first enabled model of any
+///   provider, else return a user-facing error instructing the user to add a
+///   model in Settings.
+/// - bare `alias`: an exact model-name match among enabled primary providers.
+/// - `{ns}::{name}`: an exact match where `ns` equals a non-primary
+///   provider's `alias` (and `name` matches one of its models).
+///
+/// Disabled providers are skipped. Empty non-primary aliases are unmatchable
+/// (validation would reject them, but they are defensive-skipped here).
+pub fn resolve_model(providers: &[Provider], alias: &str) -> Result<ResolvedModel, String> {
+    let from_entry =
+        |p: &Provider, m: &ModelEntry, real_name: String, alias_out: String| ResolvedModel {
+            alias: alias_out,
+            kind: p.kind,
+            model_name: real_name,
+            base_url: p.base_url.clone(),
+            api_key: p.api_key.clone().filter(|k| !k.is_empty()),
+            max_tokens: m.max_tokens,
+            max_output_tokens: m.max_output_tokens,
+        };
+
+    // Match against a bare/non-bare alias.
+
+    let (ns, name) = split_alias(alias.trim());
+    for p in providers {
+        if !p.enabled {
+            continue;
+        }
+        let primary_match = ns.is_none() && p.is_primary;
+        let alias_match = ns.is_some() && !p.is_primary && p.alias.trim() == ns.unwrap();
+        if !(primary_match || alias_match) {
+            continue;
+        }
+        if let Some(m) = p.models.iter().find(|m| m.name == name) {
+            return Ok(from_entry(p, m, m.name.clone(), alias.to_string()));
+        }
+    }
+    return Err(format!(
+        "No provider/model matches `{alias}`. Add or enable it in Settings."
+    ));
+}
+
+// ---------------------------------------------------------------------------
 // Keychain helpers
 // ---------------------------------------------------------------------------
 
@@ -142,7 +226,7 @@ const KEYCHAIN_SERVICE: &str = "montor-commander";
 /// Sentinel the FE receives in place of a stored key and returns unchanged when
 /// the user does not edit the field. A returning value equal to this means
 /// "leave the keychain entry as-is".
-pub(super) const API_KEY_PLACEHOLDER: &str = "••••••••••••";
+pub(super) const API_KEY_PLACEHOLDER: &str = "••••••••••••••••••••••••";
 
 fn entry_for(provider_id: &str) -> Option<keyring::Entry> {
     keyring::Entry::new(KEYCHAIN_SERVICE, provider_id).ok()
@@ -387,7 +471,10 @@ pub(super) fn validate_providers(providers: &[Provider]) -> Result<(), String> {
 /// `key` wins unless it is empty or the placeholder; in that case, if `id` names
 /// a stored provider, its in-memory key is used. `None` lets genai fall back to
 /// its env-var lookup.
-fn resolve_request_key(
+///
+/// Used by [`all_model_names`] so the settings UI can list models for a
+/// provider whose key it only ever sees as the [`API_KEY_PLACEHOLDER`].
+fn resolve_request_api_key(
     state: &SettingsState,
     key: Option<String>,
     id: Option<&str>,
@@ -408,8 +495,32 @@ fn resolve_request_key(
         .filter(|k| !k.is_empty())
 }
 
-/// List the models a provider exposes, live (network) via
-/// `genai::Client::all_model_names`.
+/// Live-fetch the model names a provider exposes via `genai::Client::all_model_names`.
+///
+/// `base_url` overrides the adapter's native endpoint; `key` (when present) is
+/// sent as the auth credential, and otherwise genai falls back to the
+/// adapter's env-var lookup. Both [`all_model_names`] (the settings-UI command)
+/// and [`list_available_models`] (the chat-dropdown command, for Ollama) route
+/// through here so the genai invocation lives in one place.
+async fn fetch_models_from_genai(
+    kind: AdapterKind,
+    base_url: Option<&str>,
+    key: Option<String>,
+) -> Result<Vec<String>, String> {
+    let mut config = ProviderConfig::default();
+    if let Some(url) = base_url.filter(|u| !u.trim().is_empty()) {
+        config = config.with_endpoint(Endpoint::from_owned(url.to_string()));
+    }
+    if let Some(k) = key {
+        config = config.with_auth(AuthData::from_single(k));
+    }
+    genai::Client::default()
+        .all_model_names(kind, config)
+        .await
+        .map_err(|e| format!("failed to list models: {e}"))
+}
+
+/// List the models a provider exposes, live (network) via `genai`.
 ///
 /// `base_url` overrides the adapter's endpoint; `key`/`id` supply auth. When
 /// `key` is the placeholder (or omitted) and `id` names a stored provider, that
@@ -425,20 +536,114 @@ pub async fn all_model_names(
 ) -> Result<Vec<String>, String> {
     // Resolve the key before any `.await` so the non-Send MutexGuard is dropped
     // (the command future must be `Send`).
-    let resolved_key = resolve_request_key(&state, key, id.as_deref());
+    let resolved_key = resolve_request_api_key(&state, key, id.as_deref());
+    fetch_models_from_genai(kind, base_url.as_deref(), resolved_key).await
+}
 
-    let mut config = ProviderConfig::default();
-    if let Some(url) = base_url.filter(|u| !u.trim().is_empty()) {
-        config = config.with_endpoint(Endpoint::from_owned(url));
-    }
-    if let Some(k) = resolved_key {
-        config = config.with_auth(AuthData::from_single(k));
+// ---------------------------------------------------------------------------
+// list_available_models (chat model dropdown)
+// ---------------------------------------------------------------------------
+
+/// One selectable model in the chat model dropdown.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmModelOption {
+    /// Human-readable label, currently the bare model name.
+    pub display_name: String,
+    /// Selection alias stored on the chat session. Bare for a primary provider,
+    /// `{provider_alias}::{model_name}` otherwise — matches [`resolve_model`].
+    pub alias: String,
+}
+
+/// A group of models offered by one provider, for the chat model dropdown.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmProviderModels {
+    /// Group label: the provider's display name if non-empty, else the kind's.
+    pub provider_name: String,
+    pub models: Vec<LlmModelOption>,
+}
+
+/// All models the user can select for chat, grouped by provider.
+///
+/// For Ollama providers the model list is fetched live via `genai` (Ollama is
+/// the only adapter `all_model_names` queries dynamically); other adapters use
+/// the models the user configured. Disabled providers, and non-primary providers
+/// missing an `alias` (their models aren't addressable by alias), are skipped.
+///
+/// Live-fetch failures per provider do not fail the whole command — the group
+/// comes back empty and the error is logged, so the dropdown still renders.
+#[tauri::command]
+pub async fn list_available_models(
+    state: State<'_, SettingsState>,
+) -> Result<Vec<LlmProviderModels>, String> {
+    // Snapshot providers (including keychain keys) under the lock, then drop the
+    // guard before any `.await` (command future must be `Send`).
+    let providers = state.inner.lock().unwrap().llm_providers.providers.clone();
+
+    let mut groups = Vec::with_capacity(providers.len());
+    for p in providers {
+        if !p.enabled {
+            continue;
+        }
+        // Non-primary providers need a non-empty alias to be addressable.
+        if !p.is_primary && p.alias.trim().is_empty() {
+            tracing::warn!(
+                provider_id = %p.id,
+                "skipping non-primary provider with empty alias in list_available_models"
+            );
+            continue;
+        }
+
+        let group_name = if !p.name.trim().is_empty() {
+            p.name.clone()
+        } else {
+            format!("{:?}", p.kind)
+        };
+
+        // Resolve effective auth for a potential live fetch: the keychain key
+        // (already present in `p.api_key`), or None to let genai use the env var.
+        let key = p.api_key.clone().filter(|k| !k.is_empty());
+
+        let model_names: Vec<String> = match p.kind {
+            AdapterKind::Ollama => {
+                match fetch_models_from_genai(p.kind, p.base_url.as_deref(), key).await {
+                    Ok(names) => names,
+                    Err(e) => {
+                        tracing::warn!(
+                            provider_id = %p.id,
+                            error = %e,
+                            "failed to list models for provider; emitting empty group"
+                        );
+                        Vec::new()
+                    }
+                }
+            }
+            _ => p.models.iter().map(|m| m.name.clone()).collect(),
+        };
+
+        let options = model_names
+            .into_iter()
+            .map(|name| {
+                let alias = if p.is_primary {
+                    name.clone()
+                } else {
+                    format!("{}::{}", p.alias.trim(), name)
+                };
+                LlmModelOption {
+                    display_name: name,
+                    alias,
+                }
+            })
+            .collect();
+
+        groups.push(LlmProviderModels {
+            provider_name: group_name,
+            models: options,
+        });
     }
 
-    genai::Client::default()
-        .all_model_names(kind, config)
-        .await
-        .map_err(|e| format!("failed to list models: {e}"))
+    Ok(groups)
 }
 
 const PROVIDER_KINDS: &[AdapterKind] = &[
@@ -859,5 +1064,122 @@ mod tests {
         let mut incoming = [incoming];
         apply_incoming_provider_keys(&[], &mut incoming);
         assert_eq!(incoming[0].api_key, None);
+    }
+
+    // --- resolve_model ------------------------------------------------------
+
+    /// Primary provider (empty alias, `is_primary = true`) with two models.
+    fn primary(id: &str, kind: AdapterKind, models: &[&str]) -> Provider {
+        Provider {
+            id: id.into(),
+            name: String::new(),
+            alias: String::new(),
+            kind,
+            base_url: None,
+            models: models.iter().map(|m| model(m)).collect(),
+            enabled: true,
+            is_primary: true,
+            api_key: None,
+        }
+    }
+
+    /// Non-primary provider with an alias and custom endpoint.
+    fn aliased(
+        id: &str,
+        name: &str,
+        alias: &str,
+        kind: AdapterKind,
+        base_url: &str,
+        models: &[&str],
+    ) -> Provider {
+        Provider {
+            id: id.into(),
+            name: name.into(),
+            alias: alias.into(),
+            kind,
+            base_url: Some(base_url.into()),
+            models: models.iter().map(|m| model(m)).collect(),
+            enabled: true,
+            is_primary: false,
+            api_key: None,
+        }
+    }
+
+    #[test]
+    fn resolve_model_primary_bare_alias() {
+        let providers = vec![primary("openai", AdapterKind::OpenAI, &["gpt-4o", "gpt-5"])];
+        let r = resolve_model(&providers, "gpt-4o").unwrap();
+        assert_eq!(r.alias, "gpt-4o");
+        assert_eq!(r.model_name, "gpt-4o");
+        assert_eq!(r.kind, AdapterKind::OpenAI);
+        assert_eq!(r.base_url, None);
+        assert_eq!(r.api_key, None);
+    }
+
+    #[test]
+    fn resolve_model_non_primary_namespaced_alias() {
+        let providers = vec![
+            primary("openai", AdapterKind::OpenAI, &["gpt-4o"]),
+            aliased(
+                "router",
+                "My Router",
+                "myrouter",
+                AdapterKind::OpenAI,
+                "https://router/v1/",
+                &["openai/gpt-4o", "claude-opus-4-5"],
+            ),
+        ];
+        let r = resolve_model(&providers, "myrouter::openai/gpt-4o").unwrap();
+        assert_eq!(r.alias, "myrouter::openai/gpt-4o");
+        assert_eq!(r.model_name, "openai/gpt-4o");
+        assert_eq!(r.kind, AdapterKind::OpenAI);
+        assert_eq!(r.base_url.as_deref(), Some("https://router/v1/"));
+    }
+
+    #[test]
+    fn resolve_model_strips_prefix_in_real_name() {
+        // The alias stored on the session keeps the `alias::` prefix; the name
+        // sent to genai must be the bare model name.
+        let providers = vec![
+            primary("openai", AdapterKind::OpenAI, &["gpt-4o"]),
+            aliased("r", "R", "r", AdapterKind::OpenAI, "https://x", &["m1"]),
+        ];
+        let r = resolve_model(&providers, "r::m1").unwrap();
+        assert_eq!(r.alias, "r::m1");
+        assert_eq!(r.model_name, "m1");
+    }
+
+    #[test]
+    fn resolve_model_uses_keychain_key_when_present() {
+        let mut prov = primary("openai", AdapterKind::OpenAI, &["gpt-4o"]);
+        prov.api_key = Some("sk-from-keychain".to_string());
+        let r = resolve_model(&[prov], "gpt-4o").unwrap();
+        assert_eq!(r.api_key.as_deref(), Some("sk-from-keychain"));
+    }
+
+    #[test]
+    fn resolve_model_propagates_max_tokens() {
+        let mut prov = primary("openai", AdapterKind::OpenAI, &["gpt-4o"]);
+        prov.models[0].max_tokens = Some(4096);
+        prov.models[0].max_output_tokens = Some(1024);
+        let r = resolve_model(&[prov], "gpt-4o").unwrap();
+        assert_eq!(r.max_tokens, Some(4096));
+        assert_eq!(r.max_output_tokens, Some(1024));
+    }
+
+    #[test]
+    fn resolve_model_skips_disabled_providers() {
+        let mut prov = primary("openai", AdapterKind::OpenAI, &["gpt-4o"]);
+        prov.enabled = false;
+        let providers = vec![prov];
+        let err = resolve_model(&providers, "gpt-4o").unwrap_err();
+        assert!(err.contains("No provider/model matches"));
+    }
+
+    #[test]
+    fn resolve_model_unresolvable_alias_errors() {
+        let providers = vec![primary("openai", AdapterKind::OpenAI, &["gpt-4o"])];
+        let err = resolve_model(&providers, "grok-99").unwrap_err();
+        assert!(err.contains("No provider/model matches"));
     }
 }

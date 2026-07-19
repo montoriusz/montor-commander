@@ -60,7 +60,7 @@ pub mod ui;
 // a `pub use` cannot satisfy. `lib.rs` therefore references section paths
 // directly.
 #[allow(unused_imports)] // public surface; consumers opt in as needed
-pub use llm_providers::{LlmProviderSettings, ModelEntry, Provider};
+pub use llm_providers::{LlmProviderSettings, ModelEntry, Provider, ResolvedModel};
 #[allow(unused_imports)] // public surface; consumers opt in as needed
 pub use ui::{Theme, UiSettings};
 
@@ -152,6 +152,18 @@ impl SettingsState {
     /// callers that hand it to the FE must redact first, see [`get_settings`]).
     fn settings(&self) -> Settings {
         self.inner.lock().unwrap().clone()
+    }
+
+    /// Resolve the model alias selected for a chat session into a genai-bound
+    /// [`ResolvedModel`] (kind/endpoint/auth/limits). Resolves under the lock
+    /// and returns an owned value, so no `MutexGuard` crosses an `.await` —
+    /// safe to call from a Tauri command future.
+    ///
+    /// `alias = None` selects the default (first enabled primary provider's
+    /// first model). See [`llm_providers::resolve_model`] for full rules.
+    pub fn resolve_model(&self, alias: &str) -> Result<ResolvedModel, String> {
+        let providers = &self.inner.lock().unwrap().llm_providers.providers;
+        llm_providers::resolve_model(providers, alias)
     }
 
     fn settings_by_categories(&self, sections: Vec<SettingsCategory>) -> SettingsUpdate {

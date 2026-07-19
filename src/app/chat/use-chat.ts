@@ -11,6 +11,8 @@ export function useChat() {
     messages: state.messages as readonly ChatMessage[],
     isGenerating: state.isGenerating,
     error: state.error,
+    selectedModel: state.selectedModel,
     send: chatStore.send,
+    setSelectedModel: chatStore.setSelectedModel,
   };
 }

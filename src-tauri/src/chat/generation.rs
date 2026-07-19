@@ -1,17 +1,19 @@
 use askama::Template;
+use genai::adapter::AdapterKind;
 use genai::chat::{
     ChatMessage as GenaiChatMessage, ChatOptions, ChatRequest, ChatResponseFormat, JsonSpec,
 };
+use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
+use genai::{Client, ModelIden, ServiceTarget};
 use serde::{Deserialize, Serialize};
 
 use crate::chat::ChatMessage;
 use crate::jsonl_store::JsonlStore;
+use crate::settings::ResolvedModel;
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const MODEL: &str = "gemini-pro-latest";
 
 const DEV_SYSTEM_PROMPT_PREFIX: &str =
     "This application is running in DEV mode. Freely share internals when needed.";
@@ -85,6 +87,55 @@ fn response_format() -> ChatResponseFormat {
         }),
     );
     ChatResponseFormat::JsonSpec(spec)
+}
+
+// ---------------------------------------------------------------------------
+// Client builder
+// ---------------------------------------------------------------------------
+
+/// Build a [`genai::Client`] that routes a resolved model to its configured
+/// provider endpoint/auth.
+///
+/// All the work happens in a [`ServiceTargetResolver`]: it runs last in genai's
+/// `resolve_service_target` pipeline (after the default endpoint/auth for the
+/// inferred `AdapterKind`), so it sees the correct adapter kind and can override
+/// `model`/`auth`/`endpoint` in one place. Folding auth in here (rather than a
+/// separate `AuthResolver`) avoids an unreliable kind match for custom aliases,
+/// which at genai resolution time may still be the Ollama fallback.
+///
+/// Auth precedence: keychain key (`Some`) > env-var name for `kind` > adapter
+/// default — i.e. "env by default, UI override optional". Returning the
+/// adapter default when no override is present lets genai read the standard env
+/// var (`OPENAI_API_KEY`, …) for the kind.
+fn build_client(model: &ResolvedModel) -> Client {
+    let kind: AdapterKind = model.kind;
+    let real_name = model.model_name.clone();
+    let base_url = model.base_url.clone();
+    let api_key = model.api_key.clone();
+    let env_name = kind.default_key_env_name().map(|s| s.to_string());
+
+    let target_resolver = ServiceTargetResolver::from_resolver_fn(
+        move |mut st: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
+            // Override the model iden with the real name on the resolved adapter,
+            // in case genai's initial inference landed on the wrong adapter.
+            st.model = ModelIden::new(kind, real_name.clone());
+            if let Some(url) = base_url.clone() {
+                st.endpoint = Endpoint::from_owned(url);
+            }
+            st.auth = match api_key.clone() {
+                Some(k) => AuthData::from_single(k),
+                None => match env_name.clone() {
+                    Some(name) => AuthData::from_env(name),
+                    None => st.auth, // adapter default (already resolved)
+                },
+            };
+            Ok(st)
+        },
+    );
+
+    Client::builder()
+        .with_service_target_resolver(target_resolver)
+        .build()
 }
 
 // ---------------------------------------------------------------------------
@@ -242,8 +293,9 @@ pub(crate) async fn generate_assistant_reply(
     store: &JsonlStore<ChatMessage>,
     now_ts: &str,
     sysinfo: &str,
+    model: &ResolvedModel,
 ) -> Result<u32, String> {
-    let client = genai::Client::builder().build();
+    let client = build_client(model);
     let req = build_history(store, sysinfo)?;
 
     // Log the serialized `ChatRequest` (system prompt + all formatted turns) at
@@ -251,19 +303,22 @@ pub(crate) async fn generate_assistant_reply(
     // (the API key lives on the client), so serializing it is safe.
     if tracing::enabled!(tracing::Level::DEBUG) {
         match serde_json::to_string_pretty(&req) {
-            Ok(json) => tracing::debug!(model = MODEL, request = %json, "genai request"),
+            Ok(json) => tracing::debug!(model = %model.alias, request = %json, "genai request"),
             Err(e) => tracing::debug!(
-                model = MODEL,
+                model = %model.alias,
                 error = %e,
                 "failed to serialize genai request for logging"
             ),
         }
     }
 
-    let options = ChatOptions::default().with_response_format(response_format());
+    let mut options = ChatOptions::default().with_response_format(response_format());
+    if let Some(max_tokens) = model.max_tokens {
+        options = options.with_max_tokens(max_tokens);
+    }
 
     let response = client
-        .exec_chat(MODEL, req, Some(&options))
+        .exec_chat(&model.model_name, req, Some(&options))
         .await
         .map_err(|e| e.to_string())?;
 
@@ -281,7 +336,7 @@ pub(crate) async fn generate_assistant_reply(
         cmdline: parsed.commandline,
         msg: parsed.message,
         ts: now_ts.to_string(),
-        model: MODEL.to_string(),
+        model: model.alias.clone(),
     };
 
     let id = store.write(message).map_err(|e| e.to_string())?;

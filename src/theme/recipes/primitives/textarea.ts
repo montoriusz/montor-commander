@@ -1,4 +1,4 @@
-import { defineRecipe } from '@pandacss/dev'
+import { defineRecipe } from '@pandacss/dev';
 
 export const textarea = defineRecipe({
   className: 'textarea',
@@ -79,4 +79,4 @@ export const textarea = defineRecipe({
       xl: { textStyle: 'lg', px: '4', py: '9px', scrollPaddingBottom: '9px' },
     },
   },
-})
+});

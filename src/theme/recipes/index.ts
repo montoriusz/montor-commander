@@ -56,25 +56,43 @@ import { tabs } from './primitives/tabs';
 import { tagsInput } from './primitives/tags-input';
 import { text } from './primitives/text';
 import { textarea } from './primitives/textarea';
+import { textareaSlot } from './primitives/textarea-slot';
 import { toast } from './primitives/toast';
 import { toggleGroup } from './primitives/toggle-group';
 import { tooltip } from './primitives/tooltip';
 export const recipes = {
   // Primitives
-  button,
-  group,
   absoluteCenter,
+  badge,
+  button,
+  code,
+  group,
+  heading,
+  icon,
+  input,
+  inputAddon,
+  kbd,
+  link,
+  prose,
+  relativeTime,
+  skeleton,
   spinner,
+  text,
+  textarea,
+
+  // Composites
+  sectionConnector,
+};
+export const slotRecipes = {
+  // Primitives
   accordion,
   alert,
   avatar,
-  badge,
   breadcrumb,
   card,
   carousel,
   checkbox,
   clipboard,
-  code,
   collapsible,
   colorPicker,
   combobox,
@@ -85,44 +103,31 @@ export const recipes = {
   field,
   fieldset,
   fileUpload,
-  heading,
   hoverCard,
-  icon,
-  input,
-  inputAddon,
   inputGroup,
-  kbd,
-  link,
   menu,
   numberInput,
   pagination,
   pinInput,
   popover,
-  relativeTime,
   progress,
-  prose,
   radioCardGroup,
   radioGroup,
   ratingGroup,
   scrollArea,
   segmentGroup,
   select,
-  skeleton,
   slider,
   splitter,
   switchRecipe,
   table,
   tabs,
   tagsInput,
-  text,
-  textarea,
+  textareaSlot,
   toast,
   toggleGroup,
   tooltip,
 
   // Composites
-  sectionConnector,
-};
-export const slotRecipes = {
   commandlineSuggestion,
 };

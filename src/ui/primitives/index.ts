@@ -65,6 +65,7 @@ export * as Tabs from './tabs';
 export * as TagsInput from './tags-input';
 export { Text, type TextProps } from './text';
 export { Textarea, type TextareaProps } from './textarea';
+export * as TextareaSlot from './textarea-slot';
 export { Toaster, toaster } from './toast';
 export * as ToggleGroup from './toggle-group';
 export { Tooltip, type TooltipProps } from './tooltip';

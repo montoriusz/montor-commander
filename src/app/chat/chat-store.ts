@@ -1,7 +1,6 @@
 import {
   type ChatMessage,
   type ChatPage,
-  getChatSession,
   onChatGenerationError,
   onChatMessagesChanged,
   readChatMessages,
@@ -15,6 +14,7 @@ interface ChatState {
   cursor: string | undefined;
   isGenerating: boolean;
   error: string | undefined;
+  selectedModel: string | undefined;
 }
 
 type Listener = () => void;
@@ -24,10 +24,12 @@ let state: ChatState = {
   cursor: undefined,
   isGenerating: false,
   error: undefined,
+  selectedModel: undefined,
 };
 
 const PULL_DEBOUNCE_MS = 100;
 
+// TODO: add notify = true argument instead calling notify() each time
 function setState(patch: Partial<ChatState>) {
   state = { ...state, ...patch };
 }
@@ -53,14 +55,12 @@ function subscribe(listener: Listener): () => void {
 
 async function init() {
   try {
-    // Ensure chat session is initialised.
-    await getChatSession();
-
     // Initial pull — load all messages from the beginning.
     const page: ChatPage = await readChatMessages({ afterCursor: null });
     setState({
       messages: page.messages,
       cursor: page.nextCursor ?? undefined,
+      selectedModel: lastAssistantModel(page.messages),
     });
 
     // Register event listeners.
@@ -77,6 +77,14 @@ async function init() {
   } catch (e) {
     console.error('chat-store init failed:', e);
   }
+}
+
+function lastAssistantModel(messages: ChatMessage[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.type === 'Assistant') return m.model;
+  }
+  return undefined;
 }
 
 async function pull() {
@@ -111,11 +119,19 @@ async function pull() {
 }
 
 async function send(msg: string) {
+  const model = state.selectedModel;
+
+  if (!model) {
+    setState({ error: 'No model selected', isGenerating: false });
+    notify();
+    return;
+  }
+
   setState({ isGenerating: true, error: undefined });
   notify();
 
   try {
-    await sendChatMessage({ msg });
+    await sendChatMessage({ msg, model });
     // New messages arrive via the pull triggered by the BE event.
   } catch (e) {
     setState({ error: String(e), isGenerating: false });
@@ -123,7 +139,13 @@ async function send(msg: string) {
   }
 }
 
+function setSelectedModel(alias: string | undefined) {
+  if (state.selectedModel === alias) return;
+  setState({ selectedModel: alias });
+  notify();
+}
+
 // TODO: dispose previous instance
 void init();
 
-export const chatStore = { getSnapshot, subscribe, send };
+export const chatStore = { getSnapshot, subscribe, send, setSelectedModel };

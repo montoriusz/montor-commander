@@ -1,5 +1,5 @@
-import { menuAnatomy } from '@ark-ui/react/anatomy'
-import { defineSlotRecipe } from '@pandacss/dev'
+import { menuAnatomy } from '@ark-ui/react/anatomy';
+import { defineSlotRecipe } from '@pandacss/dev';
 
 export const menu = defineSlotRecipe({
   className: 'menu',
@@ -53,18 +53,13 @@ export const menu = defineSlotRecipe({
     },
     itemGroupLabel: {
       alignItems: 'flex-start',
-      color: 'fg.subtle',
+      color: 'fg.muted',
+      bg: 'gray.subtle.bg',
       display: 'flex',
       flexDirection: 'column',
       fontWeight: 'medium',
       gap: '1px',
       justifyContent: 'center',
-      _after: {
-        content: '""',
-        width: '100%',
-        height: '1px',
-        bg: 'border',
-      },
     },
     itemIndicator: {
       justifyContent: 'flex-end',
@@ -120,4 +115,4 @@ export const menu = defineSlotRecipe({
       },
     },
   },
-})
+});

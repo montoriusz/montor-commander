@@ -96,7 +96,8 @@ pub fn run() {
             settings::save_settings,
             settings::llm_providers::all_model_names,
             settings::llm_providers::get_providers,
-            settings::llm_providers::new_provider_id
+            settings::llm_providers::new_provider_id,
+            settings::llm_providers::list_available_models
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,4 +1,4 @@
-import { ArrowUp, Settings } from 'lucide-react';
+import { ArrowUp, ChevronsUpDown, Settings } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { css, cx } from 'styled-system/css';
 import { Box, Flex, styled, VStack } from 'styled-system/jsx';
@@ -10,6 +10,7 @@ import {
 } from '@/ui/composites/commandline-suggestion';
 import { Markdown } from '@/ui/composites/markdown';
 import { IconButton, RelativeTime, SkeletonText, Spinner, Textarea } from '@/ui/primitives';
+import * as Menu from '@/ui/primitives/menu';
 import * as ScrollArea from '@/ui/primitives/scroll-area';
 import {
   CLASS_CHAT_MESSAGE,
@@ -20,6 +21,9 @@ import { commandlineController, terminal, terminalSections } from '../terminal';
 import { useEmitUpdateMatching } from '../terminal/section-matching';
 import { windowManager } from '../window-manager';
 import { useChat } from './use-chat';
+import { useChatSession } from './use-chat-session';
+import { useLlmModels } from './use-llm-models';
+import { useSetChatModel } from './use-set-chat-model';
 import {
   type SuggestionExecutionStatus,
   useSuggestionExecutionStatus,
@@ -210,6 +214,7 @@ export function ChatPane() {
         <Box p="3" fontWeight="semibold" textStyle="lg" flexGrow="1">
           Terminal Assistant
         </Box>
+        <ModelMenu />
         <Box pr="2">
           <IconButton size="xs" variant="plain" onClick={openSettings}>
             <Settings />
@@ -300,6 +305,87 @@ export function ChatPane() {
     </Flex>
   );
 }
+
+function ModelMenu() {
+  const { data: groups, isLoading } = useLlmModels();
+  const { data: session } = useChatSession();
+  const setChatModel = useSetChatModel();
+
+  // Default-selection label: show the alias the backend reports for the current
+  // session, falling back to "Default" while the session query loads.
+  const currentAlias = session?.model ?? undefined;
+  const triggerLabel = currentAlias ?? 'Default';
+
+  const handleSelect = useCallback(
+    (details: Menu.SelectionDetails) => {
+      // `null` signals "revert to default"; the radio group uses the sentinel
+      // value below for that.
+      const alias = details.value === DEFAULT_SENTINEL ? null : details.value;
+      setChatModel.mutate(alias);
+    },
+    [setChatModel],
+  );
+
+  // Flat model count is used to disable the trigger when nothing is
+  // addressable yet (e.g. no providers configured).
+  const flatCount = groups?.reduce((n, g) => n + g.models.length, 0) ?? 0;
+
+  return (
+    <Menu.Root onSelect={handleSelect}>
+      <Menu.Trigger asChild>
+        <IconButton
+          size="xs"
+          variant="plain"
+          disabled={isLoading || flatCount === 0}
+          aria-label="Select model"
+        >
+          <Flex gap="1" alignItems="center">
+            <Box maxWidth="16" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+              {isLoading ? '…' : triggerLabel}
+            </Box>
+            <ChevronsUpDown size="14" />
+          </Flex>
+        </IconButton>
+      </Menu.Trigger>
+      <Menu.Positioner>
+        <Menu.Content minWidth="40">
+          <Menu.RadioItemGroup
+            value={currentAlias ?? DEFAULT_SENTINEL}
+            key={currentAlias ?? DEFAULT_SENTINEL}
+          >
+            <Menu.ItemGroup>
+              <Menu.ItemGroupLabel fontWeight="semibold">Default</Menu.ItemGroupLabel>
+              <Menu.RadioItem value={DEFAULT_SENTINEL} valueText={DEFAULT_SENTINEL}>
+                <Menu.ItemText>Auto (first primary model)</Menu.ItemText>
+                <Menu.ItemIndicator />
+              </Menu.RadioItem>
+            </Menu.ItemGroup>
+            {groups?.flatMap((group) =>
+              group.models.length === 0
+                ? []
+                : [
+                    <Menu.ItemGroup key={group.providerName}>
+                      <Menu.Separator />
+                      <Menu.ItemGroupLabel fontWeight="semibold">
+                        {group.providerName}
+                      </Menu.ItemGroupLabel>
+                      {group.models.map((m) => (
+                        <Menu.RadioItem key={m.alias} value={m.alias} valueText={m.alias}>
+                          <Menu.ItemText>{m.displayName}</Menu.ItemText>
+                          <Menu.ItemIndicator />
+                        </Menu.RadioItem>
+                      ))}
+                    </Menu.ItemGroup>,
+                  ],
+            )}
+          </Menu.RadioItemGroup>
+        </Menu.Content>
+      </Menu.Positioner>
+    </Menu.Root>
+  );
+}
+
+const DEFAULT_SENTINEL = '__default__';
 
 const connectorClickHandler = (e: React.MouseEvent) => {
   const target = e.target as HTMLElement;

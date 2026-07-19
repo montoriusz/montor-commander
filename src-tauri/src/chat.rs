@@ -7,6 +7,7 @@ use chrono::{Local, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, State};
 
@@ -91,6 +92,10 @@ impl ChatMessage {
 #[serde(rename_all = "camelCase")]
 pub struct ChatSessionInfo {
     pub id: String,
+    /// Currently selected model alias, or `None` when the default is in effect.
+    /// The FE uses this to mark the active item in the model dropdown.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -145,6 +150,15 @@ pub struct ChatSession {
     /// [`Shell`] from `$SHELL` to spawn the shell; both agree on the kind because
     /// they read the same environment variable.
     shell: Arc<Shell>,
+    /// Model alias selected for this session (see `settings::llm_providers` for
+    /// the alias scheme: bare model name for a primary provider, or
+    /// `{provider_alias}::{model_name}` for a non-primary provider).
+    ///
+    /// In-memory only — resets to `None` (default selection) on app restart since
+    /// `ChatSession` is rebuilt per launch. Locking is brief: accessors take the
+    /// `Mutex` only long enough to clone/replace the value, so no guard crosses
+    /// an `.await` (the command future must stay `Send`).
+    selected_model: Arc<Mutex<Option<String>>>,
 }
 
 impl ChatSession {
@@ -166,6 +180,7 @@ impl ChatSession {
             store: Arc::new(store),
             generating: Arc::new(AtomicBool::new(false)),
             shell: Arc::new(Shell::from_env()),
+            selected_model: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -193,6 +208,18 @@ impl ChatSession {
         let start = after_cursor.unwrap_or(0);
         self.store.read(start, None).map_err(|e| e.to_string())
     }
+
+    /// The model alias currently selected for this session, or `None` when
+    /// the default selection is in effect (see [`SettingsState::resolve_model`]).
+    pub fn selected_model(&self) -> Option<String> {
+        self.selected_model.lock().unwrap().clone()
+    }
+
+    /// Set the model alias for this session. Pass `None` to revert to the
+    /// default selection.
+    pub fn set_selected_model(&self, alias: Option<String>) {
+        *self.selected_model.lock().unwrap() = alias;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +230,21 @@ impl ChatSession {
 pub fn get_chat_session(session: State<'_, ChatSession>) -> Result<ChatSessionInfo, String> {
     Ok(ChatSessionInfo {
         id: session.id.clone(),
+        model: session.selected_model(),
     })
+}
+
+/// Set the model the assistant uses for this chat session. Pass `None` (or omit)
+/// to revert to the default selection. The alias scheme matches
+/// [`crate::settings::llm_providers`]: bare model name for a primary provider,
+/// `{provider_alias}::{model_name}` otherwise.
+#[tauri::command]
+pub fn set_chat_model(
+    alias: Option<String>,
+    session: State<'_, ChatSession>,
+) -> Result<(), String> {
+    session.set_selected_model(alias);
+    Ok(())
 }
 
 #[tauri::command]
@@ -237,6 +278,7 @@ pub async fn send_chat_message(
     app: AppHandle,
     terminal: State<'_, TerminalSession>,
     session: State<'_, ChatSession>,
+    settings: State<'_, crate::settings::SettingsState>,
 ) -> Result<(), String> {
     // Reject if already generating.
     if session
@@ -312,6 +354,22 @@ pub async fn send_chat_message(
 
     emit_messages_changed(&app, user_id);
 
+    // Resolve the selected model against the configured providers before
+    // spawning — `SettingsState::resolve_model` returns an owned, `Send`
+    // descriptor (no `MutexGuard` crosses the `.await`), which is then moved
+    // into the spawned task alongside the store/timestamp/sysinfo.
+    let selected = session.selected_model();
+    let resolved_model = match settings.resolve_model(selected.as_deref()) {
+        Ok(m) => m,
+        Err(e) => {
+            session.generating.store(false, Ordering::SeqCst);
+            // Surface the resolution failure through the same channel as a
+            // generation error so the chat pane shows it.
+            emit_generation_error(&app, e);
+            return Ok(());
+        }
+    };
+
     // Capture what the spawned task needs, then release the State borrow.
     let generating = session.generating.clone();
     let shell = Arc::clone(&session.shell);
@@ -329,7 +387,7 @@ pub async fn send_chat_message(
             .await
             .unwrap_or_default();
 
-        match generation::generate_assistant_reply(&store, &ts, &sysinfo).await {
+        match generation::generate_assistant_reply(&store, &ts, &sysinfo, &resolved_model).await {
             Ok(assistant_id) => {
                 emit_messages_changed(&app, assistant_id.to_string());
             }

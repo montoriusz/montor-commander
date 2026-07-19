@@ -91,12 +91,14 @@ pub fn run() {
             chat::get_chat_session,
             chat::read_chat_messages,
             chat::send_chat_message,
+            chat::set_chat_model,
             settings::get_settings,
             settings::get_settings_by_categories,
             settings::save_settings,
             settings::llm_providers::all_model_names,
             settings::llm_providers::get_providers,
-            settings::llm_providers::new_provider_id
+            settings::llm_providers::new_provider_id,
+            settings::llm_providers::list_available_models
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

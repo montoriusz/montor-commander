@@ -15,14 +15,21 @@
  * iff it is the first of its kind.
  */
 import { yupResolver } from '@hookform/resolvers/yup';
-import { CloudDownloadIcon, PlusIcon, Trash2Icon, UserRoundCogIcon } from 'lucide-react';
+import {
+  CloudDownloadIcon,
+  CloudOffIcon,
+  PlusIcon,
+  Trash2Icon,
+  UserRoundCogIcon,
+} from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { type Control, type UseFormReturn, useFieldArray, useForm } from 'react-hook-form';
+import { css } from 'styled-system/css';
 import { Box, Flex, Grid, GridItem, HStack, styled, VStack } from 'styled-system/jsx';
 import { formatInvokeError } from '@/app/shared/invoke-error.helpers';
 import { useSettingsFormStatusSync } from '@/app/shared/settings-form-status-store';
 import { useSettingsSlice } from '@/app/shared/settings-store';
-import { newProviderId, type ProviderMeta } from '@/generated';
+import { type ModelEntry, newProviderId, type ProviderMeta } from '@/generated';
 import type { SelectOption } from '@/ui/composites/form-fields';
 import { CheckboxField, NumberField, SwitchField, TextField } from '@/ui/composites/form-fields';
 import { Accordion, Button, Collapsible, IconButton, Menu } from '@/ui/primitives';
@@ -34,6 +41,7 @@ import {
   type ProvidersFormValues,
   providersSectionSchema,
 } from './providers-section.schemas';
+import { useFetchModels } from './use-fetch-models';
 import { useProvidersMeta } from './use-providers-meta';
 
 const EMPTY_MODEL = { name: '', isCustom: true, maxTokens: null, maxOutputTokens: null };
@@ -113,8 +121,15 @@ export function ProvidersSectionForm() {
 
   const onSubmit = form.handleSubmit(async (values) => {
     try {
+      // Clear name/alias for primary providers before sending
+      const payload = {
+        ...values,
+        providers: values.providers.map((p) => (p.isPrimary ? { ...p, name: '', alias: '' } : p)),
+      };
       // TODO: fill alias suggestions
-      await saveProviders(values);
+      // TODO: handle dirty state
+      await saveProviders(payload);
+      form.reset(values);
       toaster.create({ title: 'Providers saved', type: 'success' });
     } catch (e) {
       toaster.create({
@@ -204,10 +219,11 @@ interface ProviderAccordionItemProps {
 function ProviderAccordionItem(props: Readonly<ProviderAccordionItemProps>) {
   const { itemId, index, control, form, kindMap, setPrimaryExclusive } = props;
   const modelArray = useFieldArray({ control, name: `providers.${index}.models` });
-  const [entryName, kind, apiKey, isPrimary] = form.watch([
+  const [entryName, kind, apiKey, baseUrl, isPrimary] = form.watch([
     `providers.${index}.name`,
     `providers.${index}.kind`,
     `providers.${index}.apiKey`,
+    `providers.${index}.baseUrl`,
     `providers.${index}.isPrimary`,
   ]);
 
@@ -229,6 +245,47 @@ function ProviderAccordionItem(props: Readonly<ProviderAccordionItemProps>) {
     },
     [index, kind, setPrimaryExclusive],
   );
+
+  const fetchModels = useFetchModels();
+
+  const [fetchedModelsSet, setFetchedModelsSet] = useState<Set<string> | undefined>();
+
+  const onFetchModels = useCallback(() => {
+    fetchModels.mutate(
+      { kind, baseUrl: baseUrl || undefined, key: apiKey ?? undefined, id: itemId },
+      {
+        onSuccess: (names) => {
+          const current = form.getValues(`providers.${index}.models`);
+          const fetched = new Set(names);
+          // Keep user-added models the API didn't return. A same-named custom
+          // entry is therefore dropped here and replaced by its API counterpart
+          // below.
+          const keptCustom: ModelEntry[] = current.filter(
+            (m) => m.isCustom && !fetched.has(m.name),
+          );
+          const merged = [
+            ...names.map((name) => ({
+              name,
+              isCustom: false,
+              maxTokens: null,
+              maxOutputTokens: null,
+            })),
+            ...keptCustom,
+          ];
+          modelArray.replace(merged);
+          setFetchedModelsSet(fetched);
+          // `replace` always marks dirty, but doesn't re-run validation.
+          void form.trigger(`providers.${index}.models`);
+        },
+        onError: (e) =>
+          toaster.create({
+            title: 'Failed to fetch models',
+            description: formatInvokeError(e),
+            type: 'error',
+          }),
+      },
+    );
+  }, [fetchModels, form, modelArray, kind, baseUrl, apiKey, itemId, index]);
 
   const addModel = useCallback(() => modelArray.append({ ...EMPTY_MODEL }), [modelArray]);
   const removeProvider = useCallback(() => {
@@ -343,9 +400,14 @@ function ProviderAccordionItem(props: Readonly<ProviderAccordionItemProps>) {
               <HStack justifyContent="space-between">
                 <Box>Models</Box>
                 <HStack>
-                  <Button size="xs" variant="surface">
+                  <Button
+                    size="xs"
+                    variant="surface"
+                    onClick={onFetchModels}
+                    disabled={fetchModels.isPending}
+                  >
                     <CloudDownloadIcon />
-                    Fetch models
+                    {fetchModels.isPending ? 'Fetching…' : 'Fetch models'}
                   </Button>
                   <Button size="xs" variant="plain" onClick={addModel}>
                     <PlusIcon />
@@ -362,6 +424,7 @@ function ProviderAccordionItem(props: Readonly<ProviderAccordionItemProps>) {
                     index={index}
                     modelIndex={modelIndex}
                     onRemove={() => modelArray.remove(modelIndex)}
+                    isDeprecated={fetchedModelsSet && !fetchedModelsSet.has(modelField.name)}
                   />
                 ))}
               </VStack>
@@ -379,10 +442,11 @@ interface ModelRowProps {
   modelIndex: number;
   control: ProvidersControl;
   onRemove: () => void;
+  isDeprecated?: boolean;
 }
 
 function ModelRow(props: Readonly<ModelRowProps>) {
-  const { index, modelIndex, control, onRemove, form } = props;
+  const { index, modelIndex, control, onRemove, form, isDeprecated } = props;
   const namePath = `providers.${index}.models.${modelIndex}.name` as const;
   const maxTokensPath = `providers.${index}.models.${modelIndex}.maxTokens` as const;
   const maxOutputTokensPath = `providers.${index}.models.${modelIndex}.maxOutputTokens` as const;
@@ -402,6 +466,13 @@ function ModelRow(props: Readonly<ModelRowProps>) {
             isCustom ? (
               <div title="User-added model">
                 <UserRoundCogIcon />
+              </div>
+            ) : isDeprecated ? (
+              <div
+                title="API-provided model no longer available"
+                className={css({ color: 'error' })}
+              >
+                <CloudOffIcon />
               </div>
             ) : (
               <div title="API-provided model">

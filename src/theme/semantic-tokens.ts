@@ -3,11 +3,17 @@ import { shadows } from './tokens/shadows';
 export const semanticTokens = {
   colors: {
     canvas: {
-      value: '#0a0a0a',
-      // value: {
-      //   _light: '{colors.white}',
-      //   _dark: '{colors.black}',
-      // },
+      value: {
+        _light: '{colors.gray.2}',
+        _dark: '{colors.gray.1}',
+      },
+    },
+
+    termCmd: {
+      value: {
+        _light: 'rgba(0, 112, 64, 0.18)',
+        _dark: 'rgba(112, 255, 192, 0.15)',
+      },
     },
 
     fg: {

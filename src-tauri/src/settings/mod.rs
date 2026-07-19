@@ -155,9 +155,7 @@ impl SettingsState {
     }
 
     fn settings_by_categories(&self, sections: Vec<SettingsCategory>) -> SettingsUpdate {
-        let mut result = SettingsUpdate {
-            ..Default::default()
-        };
+        let mut result = SettingsUpdate::default();
         let settings = self.inner.lock().unwrap();
 
         for cat in sections {

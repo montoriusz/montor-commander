@@ -81,14 +81,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       await onSettingsUpdated(async (updated) => {
         const subscribedCat = get().subscribedCategories;
         const updatedCat = new Set(updated.categories);
-        if (
-          subscribedCat !== ALL_SETTINGS_CATEGORIES &&
-          !subscribedCat.some((cat) => updatedCat.has(cat))
-        ) {
-          return;
-        }
+        const catToFetch =
+          subscribedCat === ALL_SETTINGS_CATEGORIES
+            ? updated.categories
+            : subscribedCat.filter((cat) => updatedCat.has(cat));
 
-        set(await readPartial(subscribedCat));
+        if (catToFetch.length !== 0) {
+          set(await readPartial(catToFetch));
+        }
       });
     } catch (e) {
       console.error('settings-store init failed:', e);

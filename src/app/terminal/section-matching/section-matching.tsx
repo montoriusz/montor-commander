@@ -74,8 +74,6 @@ export function SectionMatching() {
     addConnections(next, svgRect, termBySection, chatElements, 'cn');
     addConnections(next, svgRect, cmdBySection, cmdSuggElements, 'cn-cmd');
 
-    console.log('connections', next, chatElements, cmdSuggElements, termElements);
-
     setConnections(next);
   }, []);
 

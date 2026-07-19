@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Box } from 'styled-system/jsx';
 
 import '@xterm/xterm/css/xterm.css';
+import { css } from 'styled-system/css';
 import { useDebouncedCallback } from '../shared/use-debounced-callback';
 import { useEmitUpdateMatching } from './section-matching';
 import { fitTerminal, terminal } from './terminal';
@@ -39,6 +40,7 @@ export const TerminalPane = forwardRef<TerminalHandle>(function TerminalPane(_, 
   return (
     <Box
       ref={containerRef}
+      className={terminalContainerStyle}
       h="full"
       w="full"
       py="0.5"
@@ -48,4 +50,10 @@ export const TerminalPane = forwardRef<TerminalHandle>(function TerminalPane(_, 
       overflow="hidden"
     />
   );
+});
+
+const terminalContainerStyle = css({
+  '& .sctm-term-cmd': {
+    backgroundColor: 'termCmd',
+  },
 });

@@ -1,13 +1,21 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSettingsSlice } from './settings-store';
 
-export const UiSettingsProvider = ({ children }: { children: React.ReactNode }) => {
+export interface UiSettingsProviderProps {
+  onLightModeChange?: (isDark: boolean) => void;
+  children: React.ReactNode;
+}
+
+export const UiSettingsProvider = ({ children, onLightModeChange }: UiSettingsProviderProps) => {
   const [uiSettings] = useSettingsSlice('ui');
+
+  const onLightModeChangeRef = useRef(onLightModeChange);
+  onLightModeChangeRef.current = onLightModeChange;
 
   useEffect(() => {
     document.documentElement.style.fontSize = `${uiSettings.uiScale}%`;
 
-    const setMode = (isDark: boolean) => {
+    const setMode = async (isDark: boolean) => {
       const cl = document.documentElement.classList;
       if (isDark) {
         cl.remove('light');
@@ -16,6 +24,8 @@ export const UiSettingsProvider = ({ children }: { children: React.ReactNode }) 
         cl.remove('dark');
         cl.add('light');
       }
+
+      onLightModeChangeRef.current?.(isDark);
     };
 
     if (uiSettings.theme === 'system') {

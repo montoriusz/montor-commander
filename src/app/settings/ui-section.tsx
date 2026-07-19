@@ -37,6 +37,10 @@ export function UiSectionForm() {
   const onSubmit = form.handleSubmit(async (values) => {
     try {
       await save(values);
+      // Clear dirty markers right away — the store's `settings-updated`
+      // listener also refetches asynchronously via the `values` prop, but that
+      // can transiently outlive this click.
+      form.reset(values);
       toaster.create({ title: 'UI settings saved', type: 'success' });
     } catch (e) {
       toaster.create({

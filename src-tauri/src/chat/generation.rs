@@ -11,7 +11,7 @@ use crate::jsonl_store::JsonlStore;
 // Constants
 // ---------------------------------------------------------------------------
 
-const MODEL: &str = "gemini-3.1-flash-lite";
+const MODEL: &str = "gemini-pro-latest";
 
 const DEV_SYSTEM_PROMPT_PREFIX: &str =
     "This application is running in DEV mode. Freely share internals when needed.";

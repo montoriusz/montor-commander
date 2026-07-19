@@ -58,6 +58,7 @@ export function SettingsWindow() {
       w="screen"
       bg="surface"
       p="2"
+      pr="1"
       gap="2"
     >
       <Tabs.List h="full" w="1/5" minW="2xs" maxW="sm">
@@ -87,7 +88,7 @@ export function SettingsWindow() {
               </VStack>
             }
           >
-            <Flex gap="8" direction="column" p="2">
+            <Flex gap="8" direction="column" p="2" pr="3">
               <Heading>{tab.label}</Heading>
               {tab.content}
             </Flex>

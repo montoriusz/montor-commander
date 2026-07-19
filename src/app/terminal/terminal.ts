@@ -1,9 +1,11 @@
 import { Channel } from '@tauri-apps/api/core';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import { token } from 'styled-system/tokens';
 import { createShell, resizePty, type TerminalEvent, writeToPty } from '@/generated';
 import { TerminalSections } from './terminal-sections';
+import { getTerminalTheme } from './themes';
 
 // ── HMR-safe singletons ────────────────────────────────────────────────
 
@@ -17,6 +19,7 @@ interface TerminalCache {
 const { terminal, terminalSections, fitAddon } = getCache();
 
 function handleEvent(event: TerminalEvent) {
+  console.log('event', event);
   if (event.type === 'output') {
     terminal?.write(event.data);
     return;
@@ -51,14 +54,7 @@ function getCache(): TerminalCache {
     cache.initialized = true;
     const terminal = new Terminal({
       fontFamily: token('fonts.code'),
-      theme: {
-        background: token('colors.canvas'),
-        green: '#33b074',
-        brightGreen: '#3dd68c',
-        blue: '#3b9eff',
-        brightBlue: '#70b8ff',
-        overviewRulerBorder: '#272a29',
-      },
+      theme: getTerminalTheme(),
       allowProposedApi: true,
       overviewRuler: {
         width: 12,
@@ -70,21 +66,26 @@ function getCache(): TerminalCache {
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(terminalSections);
 
-    const channel = new Channel<TerminalEvent>();
-    channel.onmessage = handleEvent;
-
-    terminal.onData((data) => {
-      void writeToPty({ data });
-    });
-
-    createShell({ onEvent: channel }).catch((error) => {
-      console.error('Error creating shell:', error);
-    });
-
     // Store the terminal and addons in the cache.
     cache.terminal = terminal;
     cache.fitAddon = fitAddon;
     cache.terminalSections = terminalSections;
+
+    const isMainWindow = WebviewWindow.getCurrent().label === 'main';
+    if (isMainWindow) {
+      const channel = new Channel<TerminalEvent>();
+      channel.onmessage = handleEvent;
+
+      terminal.onData((data) => {
+        void writeToPty({ data });
+      });
+
+      createShell({ onEvent: channel }).catch((error) => {
+        console.error('Error creating shell:', error);
+      });
+    } else {
+      console.warn('Terminal should not be loaded in non-main windows!');
+    }
   }
 
   return cache;

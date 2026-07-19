@@ -67,6 +67,7 @@ pub struct Provider {
     /// Stable opaque id (UUID). Also the keychain entry name.
     pub id: String,
     /// Display label.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub name: String,
     /// Logs alias.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -579,6 +580,26 @@ mod tests {
         let json = serde_json::to_string(&file_copy[0]).unwrap();
         assert!(!json.contains("sk-secret"));
         assert!(!json.contains("apiKey"));
+    }
+
+    #[test]
+    fn empty_name_and_alias_omitted_from_serialization() {
+        // A primary provider defaults to empty `name`/`alias`; both fields
+        // carry `#[serde(default, skip_serializing_if = "String::is_empty")]`,
+        // so the wire format omits them when empty — matching the FE's TS type
+        // where they're effectively optional after a primary round-trip.
+        let mut prov = p("a", "", AdapterKind::OpenAI, None);
+        prov.is_primary = true;
+        let json = serde_json::to_string(&prov).unwrap();
+        assert!(!json.contains("\"name\""));
+        assert!(!json.contains("\"alias\""));
+
+        // Non-empty values serialize normally.
+        let mut prov = p("a", "My Provider", AdapterKind::OpenAI, None);
+        prov.alias = "mine".into();
+        let json = serde_json::to_string(&prov).unwrap();
+        assert!(json.contains("\"name\":\"My Provider\""));
+        assert!(json.contains("\"alias\":\"mine\""));
     }
 
     #[test]

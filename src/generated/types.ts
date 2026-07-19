@@ -7,19 +7,29 @@
  * Do not edit manually - regenerate using: cargo tauri-typegen generate
  */
 
-
 import type { Channel } from '@tauri-apps/api/core';
 
 export interface ChatGenerationErrorPayload {
   message: string;
 }
 
-
 export type ChatMessage =
-| { type: "User"; id: string; ts: string; msg: string }
-| { type: "Assistant"; id: string; ts: string; cmdline: string; msg: string; model: string }
-| { type: "TerminalSection"; id: string; ts: string; aid: string; exit_code: number | null; executed: boolean; cols: number; rows: number; raw: string; prompt: string; cmdline: string; output: string }
-;
+  | { type: 'User'; id: string; ts: string; msg: string }
+  | { type: 'Assistant'; id: string; ts: string; cmdline: string; msg: string; model: string }
+  | {
+      type: 'TerminalSection';
+      id: string;
+      ts: string;
+      aid: string;
+      exit_code: number | null;
+      executed: boolean;
+      cols: number;
+      rows: number;
+      raw: string;
+      prompt: string;
+      cmdline: string;
+      output: string;
+    };
 
 export interface ChatMessagesChangedPayload {
   latestId: string;
@@ -49,7 +59,33 @@ export interface Provider {
   id: string;
   name: string;
   alias: string;
-  kind: "OpenAI" | "OpenAIResp" | "Gemini" | "Anthropic" | "Fireworks" | "Together" | "Groq" | "Aihubmix" | "Mimo" | "Moonshot" | "Nebius" | "Xai" | "DeepSeek" | "Zai" | "BigModel" | "Aliyun" | "Baidu" | "Cohere" | "Ollama" | "OllamaCloud" | "Vertex" | "GithubCopilot" | "OpenCodeGo" | "BedrockApi" | "OpenRouter" | "MiniMax";
+  kind:
+    | 'OpenAI'
+    | 'OpenAIResp'
+    | 'Gemini'
+    | 'Anthropic'
+    | 'Fireworks'
+    | 'Together'
+    | 'Groq'
+    | 'Aihubmix'
+    | 'Mimo'
+    | 'Moonshot'
+    | 'Nebius'
+    | 'Xai'
+    | 'DeepSeek'
+    | 'Zai'
+    | 'BigModel'
+    | 'Aliyun'
+    | 'Baidu'
+    | 'Cohere'
+    | 'Ollama'
+    | 'OllamaCloud'
+    | 'Vertex'
+    | 'GithubCopilot'
+    | 'OpenCodeGo'
+    | 'BedrockApi'
+    | 'OpenRouter'
+    | 'MiniMax';
   baseUrl?: string | null;
   models: ModelEntry[];
   enabled: boolean;
@@ -58,7 +94,33 @@ export interface Provider {
 }
 
 export interface ProviderMeta {
-  kind: "OpenAI" | "OpenAIResp" | "Gemini" | "Anthropic" | "Fireworks" | "Together" | "Groq" | "Aihubmix" | "Mimo" | "Moonshot" | "Nebius" | "Xai" | "DeepSeek" | "Zai" | "BigModel" | "Aliyun" | "Baidu" | "Cohere" | "Ollama" | "OllamaCloud" | "Vertex" | "GithubCopilot" | "OpenCodeGo" | "BedrockApi" | "OpenRouter" | "MiniMax";
+  kind:
+    | 'OpenAI'
+    | 'OpenAIResp'
+    | 'Gemini'
+    | 'Anthropic'
+    | 'Fireworks'
+    | 'Together'
+    | 'Groq'
+    | 'Aihubmix'
+    | 'Mimo'
+    | 'Moonshot'
+    | 'Nebius'
+    | 'Xai'
+    | 'DeepSeek'
+    | 'Zai'
+    | 'BigModel'
+    | 'Aliyun'
+    | 'Baidu'
+    | 'Cohere'
+    | 'Ollama'
+    | 'OllamaCloud'
+    | 'Vertex'
+    | 'GithubCopilot'
+    | 'OpenCodeGo'
+    | 'BedrockApi'
+    | 'OpenRouter'
+    | 'MiniMax';
   supportsCustomModels: boolean;
   envKey: string;
   envKeyProvided: boolean;
@@ -69,8 +131,7 @@ export interface Settings {
   llmProviders: LlmProviderSettings;
 }
 
-
-export type SettingsCategory = "Ui" | "LlmProviders";
+export type SettingsCategory = 'Ui' | 'LlmProviders';
 
 export interface SettingsUpdate {
   ui?: UiSettings | null;
@@ -81,17 +142,14 @@ export interface SettingsUpdatedPayload {
   categories: SettingsCategory[];
 }
 
-
 export type TerminalEvent =
-| { type: "output"; data: string }
-| { type: "promptStarted"; aid: string | null }
-| { type: "promptEnded"; aid: string | null }
-| { type: "commandStarted"; aid: string | null }
-| { type: "commandFinished"; exit_code: number | null; aid: string | null }
-;
+  | { type: 'output'; data: string }
+  | { type: 'promptStarted'; aid: string | null }
+  | { type: 'promptEnded'; aid: string | null }
+  | { type: 'commandStarted'; aid: string | null }
+  | { type: 'commandFinished'; exit_code: number | null; aid: string | null };
 
-
-export type Theme = "system" | "light" | "dark";
+export type Theme = 'system' | 'light' | 'dark';
 
 export interface UiSettings {
   theme: Theme;
@@ -100,7 +158,33 @@ export interface UiSettings {
 }
 
 export interface AllModelNamesParams {
-  kind: "OpenAI" | "OpenAIResp" | "Gemini" | "Anthropic" | "Fireworks" | "Together" | "Groq" | "Aihubmix" | "Mimo" | "Moonshot" | "Nebius" | "Xai" | "DeepSeek" | "Zai" | "BigModel" | "Aliyun" | "Baidu" | "Cohere" | "Ollama" | "OllamaCloud" | "Vertex" | "GithubCopilot" | "OpenCodeGo" | "BedrockApi" | "OpenRouter" | "MiniMax";
+  kind:
+    | 'OpenAI'
+    | 'OpenAIResp'
+    | 'Gemini'
+    | 'Anthropic'
+    | 'Fireworks'
+    | 'Together'
+    | 'Groq'
+    | 'Aihubmix'
+    | 'Mimo'
+    | 'Moonshot'
+    | 'Nebius'
+    | 'Xai'
+    | 'DeepSeek'
+    | 'Zai'
+    | 'BigModel'
+    | 'Aliyun'
+    | 'Baidu'
+    | 'Cohere'
+    | 'Ollama'
+    | 'OllamaCloud'
+    | 'Vertex'
+    | 'GithubCopilot'
+    | 'OpenCodeGo'
+    | 'BedrockApi'
+    | 'OpenRouter'
+    | 'MiniMax';
   baseUrl?: string | null;
   key?: string | null;
   id?: string | null;
@@ -142,4 +226,3 @@ export interface WriteToPtyParams {
   data: string;
   [key: string]: unknown;
 }
-

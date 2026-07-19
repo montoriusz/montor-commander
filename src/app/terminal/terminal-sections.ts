@@ -189,7 +189,6 @@ export function parseOsc133(data: string): {
   return { marker, exitCode, aid };
 }
 
-const markingBgColor = '#121b17';
 const markingRulerColor = '#20573e';
 
 function updateSectionDecorations(term: Terminal, section: Section) {
@@ -280,7 +279,7 @@ function updateCommandDecorations(term: Terminal, section: Section) {
       x,
       width,
       layer: 'bottom',
-      backgroundColor: markingBgColor,
+      // backgroundColor: markingBgColor,
       overviewRulerOptions: {
         color: markingRulerColor,
         position: 'full',
